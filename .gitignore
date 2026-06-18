@@ -1,4 +1,4 @@
-/vendor/
+/vendor
 /.phpunit.cache/
 /node_modules/
 .env
