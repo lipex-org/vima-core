@@ -1,111 +1,23 @@
-# Vima Core
+# Vima Core v1
 
-**Vima Core** is a framework-agnostic foundation for building robust **Role-Based Access Control (RBAC)** and **Attribute-Based Access Control (ABAC)** systems in PHP.
+Vima Core is a high-performance, contract-first access control library (RBAC & ABAC) designed for modern PHP applications.
 
-Unlike consumer-facing packages, Vima Core is designed specifically for **framework developers** and **system architects**. It provides a "Contract-First" toolkit that you can integrate into your framework's identity and storage systems.
+## 🏗️ Architecture
+Vima Core v1 utilizes a **Domain-Driven Design (DDD)** approach, organizing components into vertical slices (Audit, Cache, Config, Deployment, Events, Permission, Policy, Role, Support, User) to reduce cognitive load and eliminate feature scatter.
 
-## 🎯 Target Audience
-
-- **Framework Integrators**: Building bridges for Laravel, Tempest, CodeIgniter, etc.
-- **Library Authors**: Requiring a lightweight, testable authorization foundation.
-- **Enterprise Architects**: Designing custom, decoupled security architectures.
-
-## ✨ Core Features
-
-- 🧩 **Contract-First Design**: Decoupled from storage and framework specifics.
-- 🔑 **Entity Foundation**: Standardized `User`, `Role`, and `Permission` entities.
-- 📜 **Unified Access Manager**: A single entry point for both RBAC and ABAC checks.
-- ⚙️ **Flexible Policies**: Class-based and closure-based ABAC support.
-- 🏗️ **Schema-Driven**: Typed DTOs for automated storage and migration setup.
-- 🌐 **Namespacing & Context**: Support for isolated roles and contextual authorization (e.g. multi-tenant).
-- 🧪 **Testable**: Designed with dependency injection and PSR-11 compliance.
-- 📡 **Event-Driven**: Hook into system actions, sync operations, and repository changes.
-
-## 📦 Installation
-
-```bash
-composer require vima/core
-```
-
-## 🔧 Technical Overview
-
-Vima Core provides the logic; you provide the implementation.
-
-### 1. Register Implementation Contracts
-
-As a framework integrator, you implement the storage interfaces (Repositories) and register them in the Vima container.
-
-```php
-use Vima\Core\Contracts\RoleRepositoryInterface;
-use Vima\Core\Contracts\PermissionRepositoryInterface;
-use function Vima\Core\registerMany;
-
-registerMany([
-    RoleRepositoryInterface::class => new YourDatabaseRoleRepository(),
-    PermissionRepositoryInterface::class => new YourDatabasePermissionRepository(),
-    // ... other repositories
-]);
-```
-
-### 2. Authorization Checks
-
-Once set up, authorization is simple and consistent.
-
-```php
-use Vima\Core\Services\AccessManager;
-use function Vima\Core\resolve;
-
-$vima = resolve(AccessManager::class);
-
-// RBAC Check
-if ($vima->can($user, 'posts.edit')) {
-    // Authorized...
-}
-
-// ABAC Check (with context)
-if ($vima->can($user, 'posts.edit', null, $post)) {
-    // Authorized based on policy logic...
-}
-```
-
-### 3. Defining Policies (ABAC)
-
-Policies are class-based rules for specific resources.
-
-```php
-use Vima\Core\Contracts\PolicyInterface;
-
-class PostPolicy implements PolicyInterface {
-    public function canEdit(User $user, Post $post) {
-        return $user->id === $post->userId;
-    }
-}
-
-$vima->registerPolicy(Post::class, PostPolicy::class);
-```
+## 🚀 Key Features
+- **Native Fluent API**: Highly readable, symmetrical DSL (e.g., `Vima::user($user)->grant()->role('admin')`).
+- **Domain-Driven Design**: Logic is segmented by business domain, not technical layer.
+- **Configurable Storage**: Dynamic table prefixing support to work seamlessly with any database schema.
+- **Contract-First**: Everything is driven by interfaces, allowing for easy swapping of repositories.
 
 ## 📚 Documentation
+Please see the [docs/](docs/) directory for detailed architecture, integration guides, and testing strategies.
 
-Detailed guides for deep integration:
-
-- [**Architecture Overview**](docs/architecture.md) – Understand the design and "The Vima Way".
-- [**Integration Guide**](docs/integration.md) – Step-by-step instructions for framework developers.
-- [**Event System**](docs/events.md) – Hook into internal Vima operations and actions.
-
-## 📂 Package Structure
-
-```
-src/
- ├── Contracts/         # Persistent layer and service interfaces
- ├── Entities/          # Core security data structures
- ├── Services/          # AccessManager, PolicyRegistry, and Managers
- ├── Support/           # Framework integration helpers
- └── DependencyContainer.php # Vima's PSR-11 container
+## 🛠️ Getting Started
+```bash
+composer install
 ```
 
 ## 📜 License
-
-This package is part of **Vima PHP** and is released under the MIT License.
-
----
-(c) Vima PHP <https://github.com/vimaphp>
+MIT

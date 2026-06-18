@@ -1,1 +1,8 @@
-/vendor
+/vendor/
+/.phpunit.cache/
+/node_modules/
+.env
+.php-cs-fixer.cache
+.phpunit.cache
+*.log
+.DS_Store

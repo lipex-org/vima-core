@@ -2,11 +2,13 @@
 /**
  * This file is part of Vima PHP.
  *
- * (c) Vima PHP <https://github.com/vimaphp>
+ * (c) Vima PHP <https://github.com/lipex-org>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
  */
+
+declare(strict_types=1);
 
 namespace Vima\Core\Events;
 
@@ -14,8 +16,6 @@ namespace Vima\Core\Events;
  * Class Event
  * 
  * Base class for all Vima core events.
- *
- * @package Vima\Core\Events
  */
 abstract class Event
 {

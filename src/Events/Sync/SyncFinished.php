@@ -11,7 +11,7 @@
 namespace Vima\Core\Events\Sync;
 
 use Vima\Core\Events\Event;
-use Vima\Core\Entities\Sync\SyncResponse;
+use Vima\Core\Config\Entities\Sync\SyncResponse;
 
 class SyncFinished extends Event
 {

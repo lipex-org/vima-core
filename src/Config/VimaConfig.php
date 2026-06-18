@@ -2,53 +2,45 @@
 /**
  * This file is part of Vima PHP.
  *
- * (c) Vima PHP <https://github.com/vimaphp>
+ * (c) Vima PHP <https://github.com/lipex-org>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
  */
-
 
 declare(strict_types=1);
 
 namespace Vima\Core\Config;
 
 use Closure;
-use Vima\Core\Entities\SuperAdmin;
+use Vima\Core\Config\Schema\Tables;
+use Vima\Core\Config\Schema\Columns;
+use Vima\Core\Config\DTOs\Setup;
+use Vima\Core\Config\DTOs\UserMethods;
 
 /**
  * Class VimaConfig
  * 
  * Main configuration object for Vima Core.
- *
- * @package Vima\Core\Config
  */
 class VimaConfig
 {
     /**
-     * @param Tables $tables Table names for persistent storage.
-     * @param Columns $columns Column names for persistent storage.
-     * @param Setup $setup Declarative roles and permissions setup.
-     * @param UserMethods $userMethods Mapping for user object methods.
-     * @param Closure|null $registerPolicies Callback to register ABAC policies.
-     * @param Closure|null $userResolver Custom user resolver logic.
-     * @param bool $cacheEnabled Enable or disable caching of permissions.
-     * @param int $cacheTTL Time-to-live for cache entries in seconds.
-     * @param string $cachePrefix Prefix for cache keys.
-     * @param SuperAdmin|string|null $superAdminRole Role name or object representing the super admin role.
-     * @param bool $superAdminBypass Whether super admins bypass all permission checks
+     * @param Tables $tables
+     * @param Columns $columns
+     * @param Setup $setup
+     * @param UserMethods $userMethods
+     * @param Closure|null $registerPolicies
+     * @param Closure|null $userResolver
+     * @param bool $cacheEnabled
+     * @param int $cacheTTL
+     * @param string $cachePrefix
+     * @param mixed $superAdminRole
+     * @param bool $superAdminBypass
      */
     public function __construct(
         public Tables $tables = new Tables(),
-        public Columns $columns = new Columns(
-            roles: new RoleColumns(),
-            permissions: new PermissionColumns(),
-            userRoles: new UserRoleColumns(),
-            rolePermissions: new RolePermissionColumns(),
-            userPermissions: new UserPermissionColumns(),
-            roleParents: new RoleParentColumns(),
-            userDenies: new UserDenyColumns()
-        ),
+        public Columns $columns = new Columns(),
         public Setup $setup = new Setup(),
         public UserMethods $userMethods = new UserMethods(),
 
@@ -59,7 +51,7 @@ class VimaConfig
         public int $cacheTTL = 3600,
         public string $cachePrefix = 'vima_',
 
-        public SuperAdmin|string|null $superAdminRole = null,
+        public mixed $superAdminRole = null,
         public bool $superAdminBypass = true,
     ) {
         if ($this->registerPolicies) {

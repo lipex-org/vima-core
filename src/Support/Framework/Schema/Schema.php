@@ -1,0 +1,39 @@
+<?php
+/**
+ * This file is part of Vima PHP.
+ *
+ * (c) Vima PHP <https://github.com/lipex-org>
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Vima\Core\Support\Framework\Schema;
+
+class Schema
+{
+    /** @var Table[] */
+    private array $tables = [];
+
+    public function addTable(Table $table): self
+    {
+        $this->tables[$table->name] = $table;
+        return $this;
+    }
+
+    /**
+     * @return Table[]
+     */
+    public function getTables(): array
+    {
+        return $this->tables;
+    }
+
+    public function getTable(string $name): Table
+    {
+        if (!isset($this->tables[$name])) {
+            throw new \RuntimeException("Table {$name} not found in schema.");
+        }
+        return $this->tables[$name];
+    }
+}

@@ -1,64 +1,19 @@
 # Vima Core Architecture
 
-Vima Core is designed with a **Contract-First** philosophy. It provides the essential logic and interfaces for authorization but remains completely agnostic about how data (users, roles, permissions) is persisted or how the current user is resolved.
+Vima Core v1 is structured to promote maintainability, testability, and a fluid developer experience.
 
-## Core Design Principles
+## Domain-Driven Design (DDD)
+The source code is organized into vertical domains. Each domain directory (e.g., `src/Role/`) contains its own internal structure to isolate concerns:
+- `Contracts/`: Interfaces required by the domain.
+- `Entities/`: Pure POPOs (Plain Old PHP Objects) representing the domain models.
+- `Services/`: Stateless operational logic handlers.
+- `Fluent/`: Builder classes that implement the Fluent API.
+- `Exceptions/`: Domain-specific exceptions.
 
-### 1. Independence
-The core does not depend on any specific framework or ORM. It communicates with storage layers via **Contracts** (Interfaces).
+## The Fluent API (Singular vs. Plural)
+Vima Core uses a dual-facade pattern on the `Vima` class to distinguish between contextual (singular) operations and global (plural) operations:
+- **`Vima::user($user)` / `Vima::role($role)`**: Return **Resource** objects for fluent chaining (e.g., `->grant()`, `->permissions()`).
+- **`Vima::roles()` / `Vima::permissions()`**: Return **Services** for bulk actions like `->all()`, `->create()`, or `->deleteAll()`.
 
-### 2. Contract-First
-Every major component is defined by an interface in `Vima\Core\Contracts`. Framework integrators should implement these interfaces to bridge Vima with their framework's database or identity system.
-
-### 3. Service-Oriented
-The library exposes its functionality through two main services:
-- **AccessManager**: The primary entry point for authorization checks.
-- **PolicyRegistry**: A central store for context-aware ABAC rules.
-
-## Key Components
-
-```mermaid
-graph TD
-    A[AccessManager] --> B[PolicyRegistry]
-    A --> C[RoleRepositoryInterface]
-    A --> D[PermissionRepositoryInterface]
-    A --> E[UserResolver]
-    B --> F[PolicyInterface]
-    G[FrameworkIntegration] --> H[Schema DTOs]
-```
-
-### AccessManager
-The `AccessManager` orchestrates RBAC and ABAC checks. It handles:
-- Checking if a user has a specific permission (RBAC).
-- Evaluating class-based or callback-based policies (ABAC).
-- Managing role and permission assignments.
-- **Contextual Filtering**: Roles can have a `context` (e.g. workspace ID). The manager filters active roles based on the context provided at runtime.
-
-### PolicyRegistry
-The `PolicyRegistry` maps "abilities" (e.g., `edit`, `delete`) to specific logic. It supports:
-- **Callback Policies**: Simple closures for quick checks.
-- **Class-Based Policies**: Classes implementing `PolicyInterface` for complex resource-based rules.
-    - **Naming Convention**: By default, an ability like `edit` maps to `canEdit()`.
-    - **Attribute Mapping**: Use the `#[MapToPermission]` attribute to explicitly map a method to a permission or isolate it to a specific namespace.
-
-### UserIdentity & UserInterface
-Vima doesn't require users to be of a specific class. Instead, it expects user objects to implement `UserInterface` (for getting IDs and roles) or uses a `UserResolver` to bridge existing user models.
-
-## Hybrid RBAC + ABAC
-Vima allows you to mix both systems. A `can()` check can first verify if a user has a permission via a role (RBAC) and then refine that check with a context-aware policy (ABAC). Both RBAC and ABAC checks support optional namespacing to isolate resources.
-
-## Role Inheritance
-Vima supports hierarchical roles. A role can have one or more "parent" roles, inheriting all permissions from its parents. This allows for a structured access control system where higher-level roles automatically include the permissions of lower-level ones.
-
-## Super Admin Bypass
-Vima includes a built-in mechanism to allow certain users to bypass all authorization checks (RBAC and ABAC). This is controlled by two configuration settings:
-- **`superAdminRole`**: The name of the role (or a `SuperAdmin` entity) that designates a user as a super admin.
-- **`superAdminBypass`**: A boolean flag (defaults to `true`) that, when enabled, causes `AccessManager` to grant full access to any user with the super admin role.
-
-When bypass is enabled, methods like `can()`, `isPermitted()`, and `enforce()` will return `true` (or proceed without exception) immediately if the user is identified as a super admin.
-
-## Schema-Driven Integration
-To facilitate easier framework bridging, Vima includes a metadata schema system. Instead of hardcoding database fields, integrators can use the `Schema` DTOs to dynamically discover the required data structure. This ensures that features like "Namespace" or "Context" are automatically supported by all framework-specific adapters.
-
----
-(c) Vima PHP <https://github.com/vimaphp>
+## Storage & Configuration
+Vima Core is database-agnostic, relying on repository interfaces. The `Config/Schema` namespace allows framework integrators to generate migrations based on configured table names and automatically applied prefixes.

@@ -28,22 +28,12 @@
       "Vima\\Core\\Tests\\": "tests/"
     }
   },
-  "bin": [
-    "bin/vima"
-  ],
   "scripts": {
-    "test": "pest",
-    "test:coverage": "pest --coverage",
-    "test:watch": "pest --watch"
+    "test": "phpunit"
   },
   "minimum-stability": "stable",
   "prefer-stable": true,
   "require-dev": {
-    "pestphp/pest": "^4.1"
-  },
-  "config": {
-    "allow-plugins": {
-      "pestphp/pest-plugin": true
-    }
+    "phpunit/phpunit": "^13.2"
   }
 }
