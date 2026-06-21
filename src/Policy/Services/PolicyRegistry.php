@@ -2,7 +2,7 @@
 /**
  * This file is part of Vima PHP.
  *
- * (c) Vima PHP <https://github.com/lipex-org>
+ * (c) Vima PHP <https://github.com/lipex-org/vima-core>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -13,14 +13,15 @@ declare(strict_types=1);
 namespace Vima\Core\Policy\Services;
 
 use Vima\Core\AuthorizationService;
+use Vima\Core\Config\VimaConfig;
 use Vima\Core\Events\Contracts\EventDispatcherInterface;
 use Vima\Core\Policy\Contracts\PolicyInterface;
 use Vima\Core\Policy\Contracts\PolicyRegistryInterface;
 use Vima\Core\Cache\Contracts\CacheInterface;
 use Vima\Core\Policy\DTOs\AccessContext;
-use Vima\Core\Events\Dispatchers\DefaultEventDispatcher;
 use Vima\Core\Policy\Events\PolicyRegistered;
 use Vima\Core\Policy\DTOs\AccessResponse;
+use Vima\Core\Policy\Exceptions\InvalidPolicyClassException;
 use Vima\Core\Policy\Exceptions\PolicyNotFoundException;
 use Vima\Core\Policy\Exceptions\PolicyMethodNotFoundException;
 use Vima\Core\Support\Utils\Utils;
@@ -47,13 +48,14 @@ class PolicyRegistry implements PolicyRegistryInterface
     /** @var array<string, array<string, string>> Cache for class method mappings */
     private array $methodMappingCache = [];
 
-    private ?EventDispatcherInterface $dispatcher;
-    private ?CacheInterface $cache;
 
-    public function __construct(?EventDispatcherInterface $dispatcher = null, ?CacheInterface $cache = null)
-    {
-        $this->dispatcher = $dispatcher ?? (defined('Vima\Core\Contracts\EventDispatcherInterface') ? \Vima\Core\resolve(EventDispatcherInterface::class) : new DefaultEventDispatcher());
-        $this->cache = $cache ?? (defined('Vima\Core\Contracts\CacheInterface') ? \Vima\Core\resolve(CacheInterface::class) : null);
+
+    public function __construct(
+        private EventDispatcherInterface $dispatcher,
+        private CacheInterface $cache,
+        private VimaConfig $config,
+    ) {
+        $this->registerConfigPolicies();
     }
 
     private static $instance = null;
@@ -66,10 +68,38 @@ class PolicyRegistry implements PolicyRegistryInterface
     public static function instance(): PolicyRegistry
     {
         if (self::$instance === null) {
-            self::$instance = new self();
+            self::$instance = resolve(PolicyRegistry::class);
         }
 
         return self::$instance;
+    }
+
+    /**
+     * Reset the singleton instance (primarily for testing purposes).
+     */
+    public static function reset(): void
+    {
+        self::$instance = null;
+        
+        if (class_exists(\Vima\Core\Support\Discovery\Container::class)) {
+            $container = \Vima\Core\Support\Discovery\Container::getInstance();
+            // register unsets $container->instances[$abstract] internally!
+            $container->register(PolicyRegistryInterface::class, fn() => self::instance());
+            $container->register(PolicyRegistry::class, fn($c) => new PolicyRegistry(
+                $c->get(\Vima\Core\Events\Contracts\EventDispatcherInterface::class),
+                $c->get(\Vima\Core\Cache\Contracts\CacheInterface::class),
+                $c->get(\Vima\Core\Config\VimaConfig::class)
+            ));
+            // Unregister cached VimaConfig instance as well!
+            $container->register(\Vima\Core\Config\VimaConfig::class, fn() => \Config\Services::vima_config(false));
+            $container->register(\Vima\Core\AuthorizationService::class, fn($c) => new \Vima\Core\AuthorizationService(
+                $c->get(\Vima\Core\User\Services\UserService::class),
+                $c->get(\Vima\Core\Role\Services\RoleService::class),
+                $c->get(\Vima\Core\Policy\Services\PolicyRegistry::class),
+                $c->get(\Vima\Core\Config\VimaConfig::class),
+                $c->get(\Vima\Core\Events\Contracts\EventDispatcherInterface::class)
+            ));
+        }
     }
 
     /**
@@ -95,7 +125,7 @@ class PolicyRegistry implements PolicyRegistryInterface
     public function registerClass(string $resourceClass, string $policyClass): void
     {
         if (!is_subclass_of($policyClass, PolicyInterface::class)) {
-            throw new \InvalidArgumentException("Policy class {$policyClass} must implement Vima\Core\Contracts\PolicyInterface");
+            throw new InvalidPolicyClassException("Policy class {$policyClass} must implement Vima\Core\Contracts\PolicyInterface");
         }
         $this->policiesClasses[$resourceClass] = $policyClass;
         $this->dispatcher->dispatch(new PolicyRegistered($resourceClass, $policyClass));
@@ -120,56 +150,64 @@ class PolicyRegistry implements PolicyRegistryInterface
      */
     public function evaluate(object $user, string $ability, ...$arguments): bool|AccessResponse
     {
-        [$permNamespace, $permName] = Utils::resolveNamespace($ability);
+        try {
+            [$permNamespace, $permName] = Utils::resolveNamespace($ability);
 
-        $context = new AccessContext(
-            $user,
-            $permName,
-            resolve(AuthorizationService::class),
-            $permNamespace,
-        );
+            $context = new AccessContext(
+                $user,
+                $permName,
+                resolve(AuthorizationService::class),
+                $permNamespace,
+            );
 
-        $resourceArg = $arguments[0] ?? null;
+            $resourceArg = $arguments[0] ?? null;
 
-        if (isset($resourceArg)) {
-            unset($arguments[0]);
-            $arguments = array_values($arguments);
-            $context->additionalContext = $arguments;
-        }
+            if (isset($resourceArg)) {
+                unset($arguments[0]);
+                $arguments = array_values($arguments);
+                $context->additionalContext = $arguments;
+            }
 
-        $result = null;
+            $result = null;
 
-        // 1. Try class-based policy if resource is provided
-        if ($resourceArg && is_object($resourceArg)) {
-            $resourceClass = get_class($resourceArg);
-            $policyClass = $this->resolvePolicyClass($resourceClass);
+            // 1. Try class-based policy if resource is provided
+            if ($resourceArg && is_object($resourceArg)) {
+                $resourceClass = get_class($resourceArg);
+                $policyClass = $this->resolvePolicyClass($resourceClass);
 
-            if ($policyClass) {
-                $method = $this->resolveMethodViaAttributes($policyClass, $permName, $permNamespace);
+                if ($policyClass) {
+                    $method = $this->resolveMethodViaAttributes($policyClass, $permName, $permNamespace);
 
-                if (!$method) {
-                    $method = $this->resolveMethodName($permName);
-                }
+                    if (!$method) {
+                        $method = $this->resolveMethodName($permName);
+                    }
 
-                $policy = new $policyClass();
-                if (method_exists($policy, $method)) {
-                    $result = $policy->$method($context, $resourceArg);
-                } else {
-                    throw new PolicyMethodNotFoundException($policyClass, $method);
+                    $policy = new $policyClass();
+                    if (method_exists($policy, $method)) {
+                        $result = $policy->$method($context, $resourceArg);
+                    } else {
+                        throw new PolicyMethodNotFoundException($policyClass, $method);
+                    }
                 }
             }
-        }
 
-        // 2. Fallback to callback-based policies if no class policy result
-        if ($result === null && isset($this->policies[$permName])) {
-            $result = call_user_func($this->policies[$permName], $context, $resourceArg);
-        }
+            // 2. Fallback to callback-based policies if no class policy result
+            if ($result === null) {
+                if (isset($this->policies[$ability])) {
+                    $result = call_user_func($this->policies[$ability], $context, $resourceArg);
+                } elseif (isset($this->policies[$permName])) {
+                    $result = call_user_func($this->policies[$permName], $context, $resourceArg);
+                }
+            }
 
-        if ($result === null) {
-            throw new PolicyNotFoundException($ability);
-        }
+            if ($result === null) {
+                throw new PolicyNotFoundException($ability);
+            }
 
-        return $result;
+            return $result;
+        } catch (\Throwable $e) {
+            throw $e;
+        }
     }
 
     /**
@@ -289,5 +327,22 @@ class PolicyRegistry implements PolicyRegistryInterface
     private function resolvePolicyCallback(string $ability): ?callable
     {
         return $this->policies[$ability] ?? null;
+    }
+
+    private function registerConfigPolicies(): void
+    {
+        foreach ($this->config->policy->registered as $policyClass) {
+            if (!class_exists($policyClass)) {
+                throw new InvalidPolicyClassException("Class $policyClass does not exist");
+            }
+
+            $class = new $policyClass();
+            if (!($class instanceof PolicyInterface)) {
+                throw new InvalidPolicyClassException("Class $policyClass does not implement [ " . PolicyInterface::class . " ]");
+            }
+
+            $resource = $policyClass::getResource();
+            $this->registerClass($resource, $policyClass);
+        }
     }
 }

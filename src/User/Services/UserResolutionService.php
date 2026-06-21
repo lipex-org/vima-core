@@ -2,7 +2,7 @@
 /**
  * This file is part of Vima PHP.
  *
- * (c) Vima PHP <https://github.com/lipex-org>
+ * (c) Vima PHP <https://github.com/lipex-org/vima-core>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -27,30 +27,26 @@ final class UserResolutionService
     ) {
     }
 
-    /**
-     * @param object|array $user
-     * @return int|string
-     * @throws UserResolutionException
-     */
     public function resolveId(object|array $user): int|string
     {
+        $resolvedId = null;
         if ($this->config?->userResolver !== null) {
-            return ($this->config->userResolver)($user);
-        }
-
-        if (is_array($user)) {
+            $resolvedId = ($this->config->userResolver)($user);
+        } elseif (is_array($user)) {
             throw new UserResolutionException("Use the Vima::userResolver property to provide a resolver for the user");
+        } elseif (method_exists($user, 'vimaGetId')) {
+            $resolvedId = $user->vimaGetId();
+        } else {
+            $mappedMethod = $this->config?->userMethods?->id ?? null;
+            if ($mappedMethod && method_exists($user, $mappedMethod)) {
+                $resolvedId = $user->{$mappedMethod}();
+            }
         }
 
-        if (method_exists($user, 'vimaGetId')) {
-            return $user->vimaGetId();
+        if ($resolvedId === null) {
+            throw new UserResolutionException('Could not resolve user ID.');
         }
 
-        $mappedMethod = $this->config?->userMethods?->id ?? null;
-        if ($mappedMethod && method_exists($user, $mappedMethod)) {
-            return $user->{$mappedMethod}();
-        }
-
-        throw new UserResolutionException('Could not resolve user ID.');
+        return is_scalar($resolvedId) ? (string) $resolvedId : $resolvedId;
     }
 }

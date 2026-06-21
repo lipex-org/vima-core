@@ -2,7 +2,7 @@
 /**
  * This file is part of Vima PHP.
  *
- * (c) Vima PHP <https://github.com/lipex-org>
+ * (c) Vima PHP <https://github.com/lipex-org/vima-core>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -20,6 +20,8 @@ use Vima\Core\Role\Entities\Role;
 use Vima\Core\Permission\Entities\Permission;
 use Vima\Core\Events\Contracts\EventDispatcherInterface;
 use Vima\Core\Support\Utils\Utils;
+
+use Vima\Core\Events\DomainEvent;
 
 class UserUndeny
 {
@@ -41,6 +43,11 @@ class UserUndeny
         }
 
         $this->userRoleDenies->remove($this->userId, $roleEntity->id);
+
+        $this->dispatcher->dispatch(new DomainEvent('vima.user.role_undenied', [
+            'userId' => $this->userId,
+            'role' => $roleEntity
+        ]));
     }
 
     public function permission(string|Permission $permission): void
@@ -50,6 +57,11 @@ class UserUndeny
             if ($name === '*') {
                 $pid = ($namespace ? $namespace . ':' : '') . '*';
                 $this->userDenies->remove($this->userId, $pid);
+
+                $this->dispatcher->dispatch(new DomainEvent('vima.user.permission_undenied', [
+                    'userId' => $this->userId,
+                    'permission' => $pid
+                ]));
                 return;
             }
         }
@@ -57,6 +69,11 @@ class UserUndeny
         $permissionEntity = $this->permissionService->find($permission);
         if ($permissionEntity) {
             $this->userDenies->remove($this->userId, $permissionEntity->id);
+
+            $this->dispatcher->dispatch(new DomainEvent('vima.user.permission_undenied', [
+                'userId' => $this->userId,
+                'permission' => $permissionEntity
+            ]));
         }
     }
 }

@@ -1,81 +1,61 @@
 # Vima Event System
 
-Vima Core provides an internal event system that allows framework integrators and application developers to hook into core processes like synchronization, entity persistence, and mapping generation.
+Vima contains an event dispatcher module. Every significant authentication decision, CRUD change, or user assignment fires synchronous events that can be listened to in order to generate audit logs, trigger cache purges, or integrate with custom workflows.
 
-## How it Works
+---
 
-The event system is built around the `Vima\Core\Contracts\EventDispatcherInterface`. Services like `SyncService`, `MapGenerator`, and `MappingService` accept an optional dispatcher. If not provided, they fall back to a `DefaultEventDispatcher` which records events in memory (useful for testing).
+## 1. Available Core Events
 
-## Available Events
+All events extend `Vima\Core\Events\Event` and contain custom payloads.
 
-### Sync Events
-These events are fired by `Vima\Core\Services\SyncService`.
+### Authorization & Access Events
+- **`vima.access.authorization_checked`** (`Vima\Core\Events\Access\AuthorizationChecked`):
+  Fires on every authorization check query evaluated through `can()`.
+  - **Payload**: `user`, `permission`, `namespace`, `arguments`, `result` (bool), `reason` (string|null).
+- **`vima.access.denied`** (`Vima\Core\Events\Access\AccessDenied`):
+  Fires when an access query evaluated via `enforce()` fails before throwing an exception.
+  - **Payload**: `user`, `permission`, `namespace`, `arguments`.
 
-| Event Class | CI4 Name | Description |
-|---|---|---|
-| `Vima\Core\Events\Sync\SyncStarted` | `vima.sync.started` | Fired before synchronization begins. |
-| `Vima\Core\Events\Sync\SyncFinished` | `vima.sync.finished` | Fired after synchronization completes. |
+### Schema & Sync Events
+- **`vima.sync.started`** (`Vima\Core\Events\Sync\SyncStarted`):
+  Fires when database declarative definition synchronization begins.
+- **`vima.sync.finished`** (`Vima\Core\Events\Sync\SyncFinished`):
+  Fires when database definitions sync successfully.
+- **`vima.policy.registered`** (`Vima\Core\Policy\Events\PolicyRegistered`):
+  Fires when a dynamic or class policy is registered.
 
-### Access & Authorization Events
-These events are fired by `Vima\Core\Services\AccessManager` during authorization checks.
+### CRUD & Database Actions (`Vima\Core\Events\DomainEvent`)
+These generic domain events are fired on service data modifications:
+- **`vima.role.created`**: Fires when a new role is persisted.
+- **`vima.role.updated`**: Fires when an existing role is updated.
+- **`vima.role.deleted`**: Fires when a role is deleted.
+- **`vima.permission.created`**: Fires when a new permission is registered.
+- **`vima.permission.updated`**: Fires when an existing permission description is updated.
+- **`vima.permission.deleted`**: Fires when a permission is removed.
 
-| Event Class | CI4 Name | Description |
-|---|---|---|
-| `Vima\Core\Events\Access\AuthorizationChecked` | `vima.access.authorization_checked` | Fired after any `can()` or policy check. |
-| `Vima\Core\Events\Access\AccessDenied` | `vima.access.denied` | Fired when an authorization check fails (e.g. in `enforce()`). |
+### User Roles & Assignments (`Vima\Core\Events\DomainEvent`)
+- **`vima.user.role_granted`**: Fires when a role is granted to a user.
+- **`vima.user.permission_granted`**: Fires when a direct permission is assigned to a user.
+- **`vima.user.role_revoked`**: Fires when a user role is revoked.
+- **`vima.user.permission_revoked`**: Fires when a direct user permission is revoked.
 
-### Grant & Persistence Events
-These events are fired when roles or permissions are manually assigned or revoked.
+---
 
-| Event Class | CI4 Name | Description |
-|---|---|---|
-| `Vima\Core\Events\Grant\RoleAssigned` | `vima.grant.role_assigned` | Fired when a role is assigned to a user. |
-| `Vima\Core\Events\Grant\RoleDetached` | `vima.grant.role_detached` | Fired when a role is revoked from a user. |
-| `Vima\Core\Events\Grant\PermissionGranted` | `vima.grant.permission_granted` | Fired when a direct permission is granted. |
-| `Vima\Core\Events\Grant\PermissionRevoked` | `vima.grant.permission_revoked` | Fired when a direct permission is revoked. |
+## 2. Registering Event Listeners
 
-### Policy Events
-These events relate to policy management.
-
-| Event Class | CI4 Name | Description |
-|---|---|---|
-| `Vima\Core\Events\Policy\PolicyRegistered` | `vima.policy.registered` | Fired when a new policy callback or class is registered. |
-
-### Repository Events
-These events are fired by entity repository implementations (like those in `vima/codeigniter`).
-
-| Event Class | CI4 Name | Description |
-|---|---|---|
-| `Vima\Core\Events\Repository\RepositoryAction` | `vima.repository.action` | Generic event for entity creation, update, or deletion. |
-
-### Mapping Events
-These events are fired when role/permission mappers are generated or updated.
-
-| Event Class | CI4 Name | Description |
-|---|---|---|
-| `Vima\Core\Events\Mapping\MapGenerated` | `vima.mapping.generated` | Fired when a role or permission mapping is generated. |
-
-## Integrating a Framework
-To integrate Vima events with a framework's event system:
-
-1.  Implement `Vima\Core\Contracts\EventDispatcherInterface`.
-2.  Delegate the `dispatch()` call to the framework's internal dispatcher.
-3.  Register your implementation in the Vima `DependencyContainer`.
+If using the default Vima dispatcher, listen to events programmatically using:
 
 ```php
-use Vima\Core\Contracts\EventDispatcherInterface;
-use Vima\Core\DependencyContainer;
+use Vima\Core\resolve;
+use Vima\Core\Events\Contracts\EventDispatcherInterface;
+use Vima\Core\Events\Access\AuthorizationChecked;
 
-class FrameworkEventDispatcher implements EventDispatcherInterface {
-    public function dispatch(object $event): object {
-        $name = method_exists($event, 'getName') ? $event->getName() : get_class($event);
-        // Dispatch to framework...
-        return $event;
-    }
-}
+/** @var EventDispatcherInterface $dispatcher */
+$dispatcher = resolve(EventDispatcherInterface::class);
 
-DependencyContainer::getInstance()->register(
-    EventDispatcherInterface::class, 
-    new FrameworkEventDispatcher()
-);
+$dispatcher->listen(AuthorizationChecked::NAME, function (AuthorizationChecked $event) {
+    $data = $event->getData();
+    // E.g. Log: "User 1 checked posts.edit => Allowed"
+    logger("User {$data['user']->id} checked {$data['permission']} => " . ($data['result'] ? 'Allowed' : 'Denied'));
+});
 ```

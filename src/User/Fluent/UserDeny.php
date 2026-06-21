@@ -2,7 +2,7 @@
 /**
  * This file is part of Vima PHP.
  *
- * (c) Vima PHP <https://github.com/lipex-org>
+ * (c) Vima PHP <https://github.com/lipex-org/vima-core>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -20,6 +20,8 @@ use Vima\Core\Role\Entities\Role;
 use Vima\Core\Permission\Entities\Permission;
 use Vima\Core\Events\Contracts\EventDispatcherInterface;
 use DateTimeInterface;
+
+use Vima\Core\Events\DomainEvent;
 
 /**
  * Class UserDeny
@@ -51,6 +53,13 @@ class UserDeny
             $reason,
             $expiresAt
         );
+
+        $this->dispatcher->dispatch(new DomainEvent('vima.user.role_denied', [
+            'userId' => $this->userId,
+            'role' => $roleEntity,
+            'reason' => $reason,
+            'expiresAt' => $expiresAt
+        ]));
     }
 
     public function permission(string|Permission $permission, ?string $reason = null, ?DateTimeInterface $expiresAt = null): void
@@ -66,5 +75,12 @@ class UserDeny
             $reason,
             $expiresAt
         );
+
+        $this->dispatcher->dispatch(new DomainEvent('vima.user.permission_denied', [
+            'userId' => $this->userId,
+            'permission' => $permissionEntity,
+            'reason' => $reason,
+            'expiresAt' => $expiresAt
+        ]));
     }
 }

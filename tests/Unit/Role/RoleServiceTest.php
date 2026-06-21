@@ -6,7 +6,6 @@ namespace Vima\Core\Tests\Unit\Role;
 
 use Vima\Core\Tests\TestCase;
 use Vima\Core\Role\Services\RoleService;
-use Vima\Core\Permission\Services\PermissionService;
 use Vima\Core\Role\Entities\Role;
 use Vima\Core\Role\Fluent\RoleResource;
 
@@ -38,13 +37,16 @@ class RoleServiceTest extends TestCase
 
         $resource = $this->service->role('editor');
         $this->assertInstanceOf(RoleResource::class, $resource);
-        $this->assertEquals('editor', $resource->getOriginalRole()->name);
+        $this->assertEquals('editor', $resource->original()->name);
     }
 
-    public function testRoleMethodThrowsIfNotFound()
+    public function testRoleMethodFluentExistsAndEnsure()
     {
-        $this->expectException(\RuntimeException::class);
-        $this->service->role('non_existent');
+        $resource = $this->service->role('non_existent');
+        $this->assertFalse($resource->exists());
+
+        $resource->ensure();
+        $this->assertTrue($resource->exists());
     }
 
     public function testDeleteRole()

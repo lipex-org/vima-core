@@ -2,7 +2,7 @@
 /**
  * This file is part of Vima PHP.
  *
- * (c) Vima PHP <https://github.com/lipex-org>
+ * (c) Vima PHP <https://github.com/lipex-org/vima-core>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -13,7 +13,11 @@ declare(strict_types=1);
 namespace Vima\Core\Config\Services;
 
 use Vima\Core\Config\VimaConfig;
+use Vima\Core\Permission\Contracts\PermissionRepositoryInterface;
 use Vima\Core\Permission\Services\PermissionService;
+use Vima\Core\Role\Contracts\RoleParentRepositoryInterface;
+use Vima\Core\Role\Contracts\RolePermissionRepositoryInterface;
+use Vima\Core\Role\Contracts\RoleRepositoryInterface;
 use Vima\Core\Role\Services\RoleService;
 use Vima\Core\Events\Contracts\EventDispatcherInterface;
 use Vima\Core\Events\Sync\SyncStarted;
@@ -21,6 +25,7 @@ use Vima\Core\Events\Sync\SyncFinished;
 use Vima\Core\Config\Entities\Sync\SyncResponse;
 use Vima\Core\Config\Entities\Sync\Skipped;
 use Vima\Core\Vima;
+use function Vima\Core\resolve;
 
 /**
  * Class SyncService
@@ -50,8 +55,10 @@ class SyncService
         $this->dispatcher->dispatch(new SyncStarted($this->config, $this->refresh));
 
         if ($this->refresh) {
-            // Assume RoleService and PermissionService handle cascade deleting
-            // or the repository truncate logic handles it.
+            resolve(RolePermissionRepositoryInterface::class)->deleteAll();
+            resolve(RoleParentRepositoryInterface::class)->deleteAll();
+            resolve(RoleRepositoryInterface::class)->deleteAll();
+            resolve(PermissionRepositoryInterface::class)->deleteAll();
         }
 
         $resolver = new ConfigResolver($this->config);
@@ -72,7 +79,8 @@ class SyncService
                 $existing->description = $permData->description;
                 $persistedPerms[$existing->getFullName()] = $this->permissionService->save($existing);
             } else {
-                $persistedPerms[$permData->getFullName()] = $this->permissionService->create($permData, $permData->description);
+                $created = $this->permissionService->create($permData, $permData->description);
+                $persistedPerms[$permData->getFullName()] = $created;
                 $stats['permissions_created']++;
             }
         }
@@ -101,7 +109,12 @@ class SyncService
             }
 
             foreach ($roleData->permissions as $perm) {
-                $roleRes->permissions()->add($persistedPerms[$perm->getFullName()]->id);
+                $pEntity = $persistedPerms[$perm->getFullName()] ?? $this->permissionService->find($perm->getFullName());
+                if (!$pEntity) {
+                    $pEntity = $this->permissionService->create($perm, $perm->description);
+                    $persistedPerms[$perm->getFullName()] = $pEntity;
+                }
+                $roleRes->permissions()->add($pEntity);
                 $stats['role_permissions_synced']++;
             }
 

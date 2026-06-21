@@ -2,7 +2,7 @@
 /**
  * This file is part of Vima PHP.
  *
- * (c) Vima PHP <https://github.com/lipex-org>
+ * (c) Vima PHP <https://github.com/lipex-org/vima-core>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -12,6 +12,8 @@ declare(strict_types=1);
 
 namespace Vima\Core;
 
+use Vima\Core\Events\Access\AccessDenied;
+use Vima\Core\Events\Access\AuthorizationChecked;
 use Vima\Core\Role\Services\RoleService;
 use Vima\Core\User\Services\UserService;
 use Vima\Core\Config\VimaConfig;
@@ -40,7 +42,7 @@ class AuthorizationService
     {
         $userRes = $this->userService->user($user);
 
-        if ($userRes->is()->superAdmin()) {
+        if ($userRes->is()->superAdmin() && $this->config->superAdminBypass) {
             return true;
         }
 
@@ -52,9 +54,11 @@ class AuthorizationService
         $fullName = $namespace ? "{$namespace}:{$permName}" : $permName;
 
         $checkConstraints = function (?array $constraints) use ($context) {
-            if (!$constraints) return true;
+            if (!$constraints)
+                return true;
             foreach ($constraints as $key => $val) {
-                if (!isset($context[$key]) || $context[$key] != $val) return false;
+                if (!isset($context[$key]) || $context[$key] != $val)
+                    return false;
             }
             return true;
         };
@@ -64,34 +68,46 @@ class AuthorizationService
         $compiled = $userRes->get()->compiled($context);
 
         if (empty($context)) {
-            if (isset($compiled[$fullName]) && empty($compiled[$fullName])) return true;
+            if (isset($compiled[$fullName]) && empty($compiled[$fullName]))
+                return true;
             foreach ($compiled as $comp => $constraints) {
                 if (empty($constraints) && str_ends_with($comp, '*')) {
-                    if (str_starts_with($fullName, rtrim($comp, '*'))) return true;
+                    if (str_starts_with($fullName, rtrim($comp, '*')))
+                        return true;
                 }
             }
         } else {
-            if (isset($compiled[$fullName]) && $checkConstraints($compiled[$fullName])) return true;
+            if (isset($compiled[$fullName]) && $checkConstraints($compiled[$fullName]))
+                return true;
             foreach ($compiled as $comp => $constraints) {
                 if (str_ends_with($comp, '*')) {
-                    if (str_starts_with($fullName, rtrim($comp, '*')) && $checkConstraints($constraints)) return true;
+                    if (str_starts_with($fullName, rtrim($comp, '*')) && $checkConstraints($constraints))
+                        return true;
                 }
             }
         }
 
         // Check fallback through user's active roles and direct permissions
         $roles = array_filter($userRes->get()->roles(true), fn($r) => !$userRes->is()->denied()->role($r));
+        $tenantId = $user->tenant_id ?? null;
+        if ($tenantId !== null) {
+            $expectedNamespace = 'tenant_' . $tenantId;
+            $roles = array_filter($roles, function ($role) use ($expectedNamespace) {
+                return $role->namespace === null || $role->namespace === $expectedNamespace;
+            });
+        }
         if (!empty($context)) {
             $roles = array_filter($roles, function ($r) use ($context) {
                 foreach ($context as $k => $v) {
-                    if (!isset($r->context[$k]) || $r->context[$k] != $v) return false;
+                    if (!isset($r->context[$k]) || $r->context[$k] != $v)
+                        return false;
                 }
                 return true;
             });
         }
 
         foreach ($roles as $role) {
-            $rolePerms = $this->roleService->getRolePermissions($role);
+            $rolePerms = $this->roleService->role($role)->permissions()->all();
             foreach ($rolePerms as $perm) {
                 $match = false;
                 if ($perm->name === $permName) {
@@ -122,8 +138,13 @@ class AuthorizationService
 
     public function can(object $user, string $permission, ...$arguments): bool
     {
-        if ($this->userService->user($user)->is()->superAdmin()) {
+        $userRes = $this->userService->user($user);
+        if ($userRes->is()->superAdmin() && $this->config->superAdminBypass) {
             return true;
+        }
+
+        if ($userRes->is()->denied()->permission($permission)) {
+            return false;
         }
 
         $hasRbac = $this->isPermitted($user, $permission);
@@ -147,6 +168,14 @@ class AuthorizationService
         }
 
         // Dispatch AuthorizationChecked Event here...
+        [$namespace, $permName] = Utils::resolveNamespace($permission);
+        $this->dispatcher->dispatch(new AuthorizationChecked(
+            $user,
+            $permName,
+            $result,
+            $namespace,
+            $arguments
+        ));
 
         return $result;
     }
@@ -155,6 +184,13 @@ class AuthorizationService
     {
         if (!$this->can($user, $permission, ...$arguments)) {
             // Dispatch AccessDenied Event here...
+            [$namespace, $permName] = Utils::resolveNamespace($permission);
+            $this->dispatcher->dispatch(new AccessDenied(
+                $user,
+                $permName,
+                $namespace,
+                $arguments
+            ));
             throw new \RuntimeException("Access Denied to {$permission}");
         }
     }

@@ -2,7 +2,7 @@
 /**
  * This file is part of Vima PHP.
  *
- * (c) Vima PHP <https://github.com/lipex-org>
+ * (c) Vima PHP <https://github.com/lipex-org/vima-core>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -38,7 +38,7 @@ class DeploymentService
     public function optimize(): array
     {
         $this->clear();
-        
+
         $stats = [
             'roles' => 0,
             'policies' => 0
@@ -47,16 +47,13 @@ class DeploymentService
         // 1. Warm Role Inheritance Caches
         $roles = $this->roleService->all();
         foreach ($roles as $role) {
-            $this->roleService->getRolePermissions($role);
+            $this->roleService->role($role)->permissions()->all();
             $stats['roles']++;
         }
 
         // 2. Warm Policy Attribute Maps
         $policies = $this->policyRegistry->getRegisteredClasses();
-        // Since we migrated policy registry, we'll invoke the method if accessible or refactor how we warm policies.
-        // The evaluate method triggers this cache naturally, or we can use reflection.
         $reflectionMethod = new \ReflectionMethod($this->policyRegistry, 'resolveMethodViaAttributes');
-        $reflectionMethod->setAccessible(true);
 
         foreach ($policies as $resource => $policyClass) {
             $reflectionMethod->invoke($this->policyRegistry, $policyClass, '__warmup__', null);

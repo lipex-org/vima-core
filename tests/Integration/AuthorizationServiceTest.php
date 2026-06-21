@@ -10,7 +10,9 @@ use Vima\Core\Role\Entities\Role;
 use Vima\Core\Permission\Entities\Permission;
 use Vima\Core\Policy\DTOs\AccessContext;
 
-class DummyPost {}
+class DummyPost
+{
+}
 
 class AuthorizationServiceTest extends TestCase
 {
@@ -21,7 +23,10 @@ class AuthorizationServiceTest extends TestCase
         parent::setUp();
         $this->user = new class implements \Vima\Core\User\Contracts\UserInterface {
             public int $id = 99;
-            public function vimaGetId(): string|int { return $this->id; }
+            public function vimaGetId(): string|int
+            {
+                return $this->id;
+            }
         };
     }
 
@@ -38,8 +43,8 @@ class AuthorizationServiceTest extends TestCase
     {
         Vima::roles()->save(new Role('member'));
         $perm = Vima::permissions()->create('role.action');
-        
-        Vima::role('member')->permissions()->add($perm->id);
+
+        Vima::role('member')->permissions()->add($perm);
         Vima::user($this->user)->grant()->role('member');
 
         $this->assertTrue(Vima::auth()->isPermitted($this->user, 'role.action'));
@@ -48,7 +53,7 @@ class AuthorizationServiceTest extends TestCase
 
     public function testAbacPolicyEvaluation()
     {
-        Vima::policies()->register('post.update', function(AccessContext $ctx, DummyPost $post) {
+        Vima::policies()->register('post.update', function (AccessContext $ctx, DummyPost $post) {
             return $ctx->user->vimaGetId() === 99;
         });
 
@@ -59,7 +64,10 @@ class AuthorizationServiceTest extends TestCase
 
         $otherUser = new class implements \Vima\Core\User\Contracts\UserInterface {
             public int $id = 1;
-            public function vimaGetId(): string|int { return $this->id; }
+            public function vimaGetId(): string|int
+            {
+                return $this->id;
+            }
         };
         $this->assertFalse(Vima::auth()->can($otherUser, 'post.update', $post));
     }

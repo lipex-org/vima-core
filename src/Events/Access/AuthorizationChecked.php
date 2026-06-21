@@ -2,7 +2,7 @@
 /**
  * This file is part of Vima PHP.
  *
- * (c) Vima PHP <https://github.com/lipex-org>
+ * (c) Vima PHP <https://github.com/lipex-org/vima-core>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -24,7 +24,8 @@ class AuthorizationChecked extends Event
             'namespace' => $namespace,
             'arguments' => $arguments,
             'result' => $result,
-            'reason' => $reason
+            'reason' => $reason,
+            'level' => $result ? 'info' : 'warning',
         ]);
     }
 }

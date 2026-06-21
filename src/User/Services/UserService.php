@@ -2,7 +2,7 @@
 /**
  * This file is part of Vima PHP.
  *
- * (c) Vima PHP <https://github.com/lipex-org>
+ * (c) Vima PHP <https://github.com/lipex-org/vima-core>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -22,6 +22,7 @@ use Vima\Core\User\Contracts\UserDenyRepositoryInterface;
 use Vima\Core\User\Contracts\UserRoleDenyRepositoryInterface;
 use Vima\Core\Events\Contracts\EventDispatcherInterface;
 use Vima\Core\Config\VimaConfig;
+use Vima\Core\Cache\Contracts\CacheInterface;
 
 /**
  * Class UserService
@@ -39,7 +40,8 @@ class UserService
         private UserDenyRepositoryInterface $userDenies,
         private UserRoleDenyRepositoryInterface $userRoleDenies,
         private EventDispatcherInterface $dispatcher,
-        private VimaConfig $config
+        private VimaConfig $config,
+        private ?CacheInterface $cache = null
     ) {
     }
 
@@ -59,7 +61,8 @@ class UserService
             $this->userDenies,
             $this->userRoleDenies,
             $this->dispatcher,
-            $this->config
+            $this->config,
+            $this->cache
         );
     }
 }

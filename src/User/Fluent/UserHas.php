@@ -2,7 +2,7 @@
 /**
  * This file is part of Vima PHP.
  *
- * (c) Vima PHP <https://github.com/lipex-org>
+ * (c) Vima PHP <https://github.com/lipex-org/vima-core>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -15,6 +15,7 @@ namespace Vima\Core\User\Fluent;
 use Vima\Core\Role\Services\RoleService;
 use Vima\Core\Role\Entities\Role;
 use Vima\Core\Support\Utils\Utils;
+use Vima\Core\Config\VimaConfig;
 
 class UserHas
 {
@@ -22,7 +23,8 @@ class UserHas
         private int|string $userId,
         private RoleService $roleService,
         private UserGet $userGet,
-        private UserIsDenied $userIsDenied
+        private UserIsDenied $userIsDenied,
+        private VimaConfig $config
     ) {
     }
 
@@ -30,6 +32,15 @@ class UserHas
     {
         if ($this->userIsDenied->role($role)) {
             return false;
+        }
+
+        // Super Admin bypass: if enabled and the user is a super admin, they have all roles.
+        $superAdminRole = $this->config->superAdminRole;
+        $roleNameString = is_string($role) ? $role : $role->name;
+        if ($superAdminRole && $this->config->superAdminBypass && $roleNameString !== $superAdminRole) {
+            if ($this->role($superAdminRole)) {
+                return true;
+            }
         }
 
         $roleName = '';

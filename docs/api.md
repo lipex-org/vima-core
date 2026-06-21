@@ -1,160 +1,61 @@
 # Vima Core API Reference
 
-The core package provides the main authorization engine and persistence-agnostic services.
+The Vima Core library uses a dual-facade design pattern on the `Vima` class. This segregates contextual (singular) operations from global/bulk (plural) operations.
 
-## Services
+---
 
-### AccessManagerInterface
-The main entry point for all authorization checks and management.
+## 1. Global / Plural Service APIs
 
-- `isPermitted(object $user, string $permission, array $context = [], ?string $namespace = null): bool`
-  Check if a user has a specific permission through roles or direct assignment. Supports fine-grained context and namespace filtering.
-- `can(object $user, string $permission, ?string $namespace = null, ...$arguments): bool`
-  Combined RBAC + ABAC check. Supports scoping by namespace and passing context arguments to policies.
-- `enforce(object $user, string $permission, ?string $namespace = null, ...$arguments): void`
-  Same as `can()`, but throws `AccessDeniedException` on failure.
-- `evaluatePolicy(object $user, string $action, ?string $namespace = null, ...$arguments): bool`
-  Manually evaluate a policy for a specific action/ability. Supports namespacing and context arguments.
-- `hasRole(object $user, string|Role $role, array $context = []): bool`
-  Check if a user is assigned a specific role, optionally filtering by role context.
-- `assignRole(object $user, string|Role $role): void`
-  Assign a role to a user.
-- `detachRole(object $user, string|Role $role): void`
-  Revoke a role from a user.
-- `getUserRoles(object $user, bool $resolve = false): array`
-  Retrieve all Roles assigned to a user.
-- `getUserPermissions(object $user, array $context = []): array`
-  Retrieve all Permissions (direct and via roles) for a user, filtered by context.
-- `permit(object $user, string|Permission $permission): void`
-  Grant a direct permission to a user.
-- `forbid(object $user, string|Permission $permission): void`
-  Revoke a direct permission.
-- `reconcileAccess(object $user, array $roles, ?array $permissions = null): void`
-  Sync a user's access state to an exact set of roles and permissions.
-- `deny(object $user, string|Permission $permission, ?string $reason = null, ?\DateTimeInterface $expiresAt = null): void`
-  Explicitly deny a permission to a user. Overrides all other grants. Supports wildcards like `*` (global) or `blog:*` (namespace). Supports temporal denials via `expiresAt`.
-- `undeny(object $user, string|Permission $permission): void`
-  Remove an explicit permission denial.
-- `denyRole(object $user, string|Role $role, ?string $reason = null, ?\DateTimeInterface $expiresAt = null): void`
-  Explicitly deny a role to a user. The user will be treated as if they don't have this role, even if it is assigned.
-- `undenyRole(object $user, string|Role $role): void`
-  Remove an explicit role denial.
-- `isDenied(object $user, string|Permission $permission, ?string $namespace = null): bool`
-  Check if a permission is denied, considering wildcards and expiration.
-- `isRoleDenied(object $user, string|Role $role): bool`
-  Check if a role is explicitly denied.
+Plural methods return stateless domain services used for entity query and creation.
 
-### SyncService
-Synchronizes declarative configuration (`Setup`) into persistent storage.
+### `Vima::roles(): RoleService`
+Accesses the `RoleService` instance.
+- **Get all roles**: `Vima::roles()->all(?string $namespace = null, bool $resolve = false): array`
+- **Find a role**: `Vima::roles()->find(int|string|Role $role, bool $resolve = false): ?Role`
+- **Save a role**: `Vima::roles()->save(Role $role): Role`
 
-- `sync(VimaConfig $config): SyncResponse`
-  Synchronize roles and permissions from config into repositories.
-- `refresh(bool $refresh = true): self`
-  If enabled, deletes all existing roles and permissions before syncing (clean slate).
+### `Vima::permissions(): PermissionService`
+Accesses the `PermissionService` instance.
+- **Get all permissions**: `Vima::permissions()->all(?string $namespace = null): array`
+- **Create a permission**: `Vima::permissions()->create(string|Permission $name, ?string $description = null): Permission`
+- **Find a permission**: `Vima::permissions()->find(int|string|Permission $permission): ?Permission`
 
-### AccessResolver
-Used to verify identifiers against the application `Setup`.
+---
 
-- `role(string|Role $role): Role`
-  Resolves a role name to a persisted Entity, validating it against `Setup`.
-- `permission(string|Permission $permission): Permission`
-  Resolves a permission name, validating it against `Setup` (direct or via roles).
+## 2. Contextual / Singular Fluent APIs
 
-### PolicyInterface
-Every class-based policy must implement this interface to provide the resource class it handles.
+Singular methods return fluent resource builders to easily perform actions or verify relationships.
 
-- `public static function getResource(): string`
-  Return the fully qualified class name of the resource this policy handles.
+### `Vima::role(string|int|Role $role): RoleResource`
+Returns a `RoleResource` instance.
+- **`exists(): bool`**: Checks if the role exists in the repository.
+- **`ensure(): RoleResource`**: Saves the role if it does not exist, then returns the resource wrapper.
+- **`original(): Role`**: Retrieves the raw database `Role` entity.
+- **`delete(): void`**: Deletes the role.
+- **`permissions(): RolePermissionsBuilder`**:
+  - **`add(string|Permission $permission, array $constraints = []): self`**: Grants a permission to this role.
+  - **`remove(string|Permission $permission): self`**: Revokes a permission.
+  - **`all(): array`**: Returns all permissions associated with this role, including inherited parent permissions.
+- **`parents(): RoleParentsBuilder`**:
+  - **`add(string|int $parentId): self`**: Sets a parent role to inherit permissions from.
+  - **`remove(string|int $parentId): self`**: Removes a parent role association.
 
-### MapToPermission Attribute
-Used to map policy methods to specific permissions and optionally a namespace.
+### `Vima::permission(string|int|Permission $permission): PermissionResource`
+Returns a `PermissionResource` instance.
+- **`exists(): bool`**: Checks if the permission exists.
+- **`ensure(): PermissionResource`**: Ensures existence or throws a `RuntimeException`.
+- **`delete(): void`**: Deletes the permission from the database.
 
-```php
-use Vima\Core\Attributes\MapToPermission;
-use Vima\Core\DTOs\AccessContext;
+### `Vima::user(object $user): UserResource`
+Returns a `UserResource` wrapper for user-specific assignment checks:
+- **`roles(): UserRolesBuilder`**: Assign, revoke, or retrieve roles for this specific user.
+- **`permissions(): UserPermissionsBuilder`**: Grant, revoke, or retrieve direct permissions for this specific user.
 
-class PostPolicy implements PolicyInterface {
-    public static function getResource(): string {
-        return Post::class;
-    }
+---
 
-    // Maps to 'posts.delete' automatically (canDelete)
-    public function canDelete(AccessContext $ctx, Post $post) {
-        return $ctx->user->id === $post->userId;
-    }
+## 3. Policy Registry API (`Vima::policies()`)
 
-    // Maps to 'posts.publish' via attribute
-    #[MapToPermission('publish')]
-    public function someCustomMethod(AccessContext $ctx, Post $post) {
-        return true;
-    }
+Allows manual configuration of callbacks for Attribute-Based Access Control (ABAC):
+- **Register callback**: `Vima::policies()->register(string $ability, callable $callback): void`
+- **Register class**: `Vima::policies()->registerClass(string $resourceClass, string $policyClass): void`
 
-    // Maps to 'blog:publish' (namespaced)
-    #[MapToPermission('publish', namespace: 'blog')]
-    public function namespacedPublish(AccessContext $ctx, Post $post) {
-        return true;
-    }
-}
-```
-
-## DTOs
-
-### AccessContext
-An instance of this class is passed as the first argument to all policy methods. It provides convenient helpers for checking the user's roles and permissions without needing to manually interact with the `AccessManager`.
-
-- `user`: The user object being checked.
-- `permission`: The permission name being checked.
-- `namespace`: The current namespace of the check.
-- `additionalContext`: Array of additional arguments passed to `can()`.
-
-**Methods:**
-- `is(string $roleName): bool`
-  Check if user has the specific role.
-- `isAny(array $roleNames): bool`
-  Check if user has any of the provided roles.
-- `isAll(array $roleNames): bool`
-  Check if user has all of the provided roles.
-- `hasRole(string|array $roleName, bool $useAny = true): bool`
-  Internal helper for role checks.
-- `isSuperAdmin(): bool`
-  Check if the user is a super admin.
-- `owns(mixed $resource, string $ownerKey = 'user_id'): bool`
-  Check if the current user "owns" the resource by comparing IDs.
-- `can(string $permission): bool`
-  Perform a manual RBAC check for the user.
-- `resolveId(): int|string|null`
-  Resolve the user's primary key.
-
-## Entities & Configuration
-
-### Role
-- `Role::define(string $name, array $permissions = [], ?string $description = null, ?string $namespace = null, array $context = [], array $parents = [], array $children = []): Role`
-  Declarative helper for use in `Setup`. Supports adding context to roles (e.g. `['school_id' => 1]`) and defining hierarchical inheritance via `parents` or `children`.
-
-### Permission
-- `Permission::define(string $name, ?string $description = null, ?string $namespace = null): Permission`
-  Declarative helper for use in `Setup`. Supports namespacing.
-
-## Schema Support
-
-Vima Core provides a framework-agnostic schema definition system to help automate storage setup.
-
-### FrameworkIntegration
-- `getSchema(): Vima\Core\Schema\Schema`
-  Returns a `Schema` object reflecting the required tables and fields based on configuration.
-
-### Vima\Core\Schema classes
-- `Schema`: Collection of `Table` objects.
-- `Table`: Contains `Field` objects, keys, and `ForeignKey` relationships.
-- `Field`: Defines column attributes (`type`, `length`, `nullable`, `unsigned`, `autoIncrement`).
-- `ForeignKey`: Defines relational constraints.
-
-### Setup
-A simple container for your declarative authorization structure. Used as the single source of truth for synchronization and resolution.
-
-## Exceptions
-
-- `AccessDeniedException`: Thrown by `enforce()`.
-- `PolicyNotFoundException`: Thrown when a resource check is attempted without a registered policy class.
-- `PolicyMethodNotFoundException`: Thrown when a policy method is missing.
-- `RoleNotFoundException`: Thrown if a requested role does not exist in storage.

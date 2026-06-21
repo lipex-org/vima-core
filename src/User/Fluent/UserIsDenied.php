@@ -2,7 +2,7 @@
 /**
  * This file is part of Vima PHP.
  *
- * (c) Vima PHP <https://github.com/lipex-org>
+ * (c) Vima PHP <https://github.com/lipex-org/vima-core>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -34,7 +34,8 @@ class UserIsDenied
     public function role(string|Role $role): bool
     {
         $roleRecord = $this->roleService->find($role);
-        if (!$roleRecord) return false;
+        if (!$roleRecord)
+            return false;
 
         $denies = $this->userRoleDenies->getDeniedRoles($this->userId);
         foreach ($denies as $deny) {
@@ -77,7 +78,8 @@ class UserIsDenied
             }
 
             $deniedPerm = $this->permissionService->find($denyId);
-            if (!$deniedPerm) continue;
+            if (!$deniedPerm)
+                continue;
 
             if ($deniedPerm->name === $permName && $deniedPerm->namespace === $permNamespace) {
                 return true;

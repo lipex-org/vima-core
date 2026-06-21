@@ -2,7 +2,7 @@
 /**
  * This file is part of Vima PHP.
  *
- * (c) Vima PHP <https://github.com/lipex-org>
+ * (c) Vima PHP <https://github.com/lipex-org/vima-core>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -13,10 +13,12 @@ declare(strict_types=1);
 namespace Vima\Core\Config;
 
 use Closure;
+use Vima\Core\Config\DTOs\PolicyConfig;
 use Vima\Core\Config\Schema\Tables;
 use Vima\Core\Config\Schema\Columns;
 use Vima\Core\Config\DTOs\Setup;
 use Vima\Core\Config\DTOs\UserMethods;
+use Vima\Core\Role\Entities\SuperAdmin;
 
 /**
  * Class VimaConfig
@@ -44,18 +46,16 @@ class VimaConfig
         public Setup $setup = new Setup(),
         public UserMethods $userMethods = new UserMethods(),
 
-        public ?Closure $registerPolicies = null,
+        public ?PolicyConfig $policy = null,
         public ?Closure $userResolver = null,
 
         public bool $cacheEnabled = false,
         public int $cacheTTL = 3600,
         public string $cachePrefix = 'vima_',
 
-        public mixed $superAdminRole = null,
+        public SuperAdmin|string|null $superAdminRole = null,
         public bool $superAdminBypass = true,
+        public string $auditLevel = 'all',
     ) {
-        if ($this->registerPolicies) {
-            ($this->registerPolicies)();
-        }
     }
 }

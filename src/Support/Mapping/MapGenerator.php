@@ -2,7 +2,7 @@
 /**
  * This file is part of Vima PHP.
  *
- * (c) Vima PHP <https://github.com/lipex-org>
+ * (c) Vima PHP <https://github.com/lipex-org/vima-core>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -46,8 +46,12 @@ class MapGenerator
 
         foreach ($setup->roles as $role) {
             foreach ($role->permissions as $perm) {
-                $name = $perm->namespace ? $perm->namespace . ':' . $perm->name : $perm->name;
-                if (!in_array($name, $permissionNames) && !str_contains($perm->name, '*')) {
+                if (is_string($perm)) {
+                    $name = $perm;
+                } else {
+                    $name = $perm->namespace ? $perm->namespace . ':' . $perm->name : $perm->name;
+                }
+                if (!in_array($name, $permissionNames) && !str_contains(is_string($perm) ? $perm : $perm->name, '*')) {
                     $permissionNames[] = $name;
                 }
             }

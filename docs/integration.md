@@ -1,141 +1,97 @@
 # Vima Core Integration Guide
 
-This guide is intended for framework developers looking to build a Vima bridge (e.g., `vima/laravel`, `vima/tempest`).
-
-## 1. Implement Storage Contracts
-
-Vima defines its storage requirements through repository interfaces. You need to implement these using your framework's DB layer.
-
-Essential interfaces:
-- `RoleRepositoryInterface`
-- `PermissionRepositoryInterface`
-- `UserRoleRepositoryInterface`
-- `UserPermissionRepositoryInterface`
-- `RolePermissionRepositoryInterface`
-
-**Note:** `UserRoleRepositoryInterface::getRolesForUser` signature:
-`public function getRolesForUser(int|string $user_id, bool $resolve = false): array;`
-(Context filtering is now handled at the service level by inspecting `Role` entities).
-
-```php
-namespace YourFramework\Vima\Repositories;
-
-use Vima\Core\Contracts\RoleRepositoryInterface;
-use Vima\Core\Entities\Role;
-
-class DatabaseRoleRepository implements RoleRepositoryInterface {
-    public function find(string|int $id): ?Role {
-        // Fetch from DB and return Role entity
-    }
-    // ... implement other methods
-}
-```
-
-## 2. User Resolution
-
-Ensure your user models implement `Vima\Core\Contracts\UserInterface` or configure a custom `UserResolver` that can extract the correct ID and roles from your framework's Auth system.
-
-```php
-namespace YourFramework\Entities;
-
-use Vima\Core\Contracts\UserInterface;
-
-class User implements UserInterface {
-    public function vimaGetId(): string|int {
-        return $this->id;
-    }
-    
-    public function vimaGetRoles(): array {
-        return $this->roles->pluck('name')->toArray();
-    }
-}
-```
-
-## 3. Dependency Injection
-
-Vima ships with its own `DependencyContainer`, but you should probably wire it into your framework's native container.
-
-```php
-// Example: Registering Vima services in a Tempest or Laravel provider
-$container->register(RoleRepositoryInterface::class, fn() => new DatabaseRoleRepository());
-$container->register(AccessManager::class, function($c) {
-    return new AccessManager(); // AccessManager will resolve its own dependencies via vima\Core\resolve()
-});
-```
-
-## 4. Configuration & Super Admin
-
-Your integration should allow users to configure global Vima settings, such as caching and the Super Admin bypass.
-
-```php
-use Vima\Core\Config\VimaConfig;
-
-$config = new VimaConfig(
-    superAdminRole: 'admin',      // Role name that bypasses checks
-    superAdminBypass: true,       // Enable/disable bypass
-    cacheEnabled: true,           // Enable authorization caching
-    cacheTTL: 3600                // Cache duration
-);
-
-$container->register(VimaConfig::class, $config);
-```
-
-The `superAdminBypass` feature allows users with the designated `superAdminRole` to skip all RBAC and ABAC evaluations, providing a "god-mode" for the application.
-
-## 5. Helper Functions & Filters
-
-To make Vima feel "native", provide framework-specific helpers.
-
-### Global Helper
-```php
-function can(string $permission, ?string $namespace = null, ...$arguments): bool {
-    $manager = Vima\Core\resolve(AccessManager::class);
-    $user = auth()->user();
-
-    // you can also have a namespace dynamically resolved from the arguments or else set it to null
-    
-    return $manager->can($user, $permission, $namespace, ...$arguments);
-}
-```
-
-### Route Filters
-Implement middleware or filters that use `AccessManager::enforce()` to guard routes.
-
-```php
-public function handle($request, Closure $next, $permission) {
-    $vima = resolve(AccessManager::class);
-    $vima->enforce(auth()->user(), $permission);
-    
-    return $next($request);
-}
-```
-
-## 5. Automated Schema Setup
-
-Vima Core provides a `FrameworkIntegration::getSchema()` method that returns a typed `Schema` DTO. You can use this to automate database migrations or configuration-based storage.
-
-### Example: Dynamic Migrations
-```php
-public function up() {
-    $schema = FrameworkIntegration::getSchema();
-    
-    foreach ($schema->getTables() as $tableName => $table) {
-        $fields = [];
-        foreach ($table->fields as $field) {
-            // Map agnostic types (integer, string, text, json) to your DB layer
-            $fields[$field->name] = [
-                'type' => $field->type === 'integer' ? 'INT' : 'VARCHAR',
-                'unsigned' => $field->unsigned,
-                'null' => $field->nullable,
-            ];
-        }
-        $this->dbForge->addField($fields);
-        $this->dbForge->createTable($tableName);
-    }
-}
-```
-
-By using the `Schema` DTO, your integration will automatically support new fields (like `context` or `namespace`) added to the Core package without manual code updates.
+Vima Core is database-agnostic and framework-agnostic. It can be integrated into any custom framework or application ecosystem (such as Symfony, Laravel, Laminas, or custom legacy codebases) by implementing repository contracts and loading the container dependency resolver.
 
 ---
-(c) Vima PHP <https://github.com/vimaphp>
+
+## 1. Storage Integration (Repositories)
+
+You must implement repository interfaces under `Vima\Core\Role\Contracts` and `Vima\Core\Permission\Contracts` matching your local database layer:
+
+### Interfaces to Implement
+- **`RoleRepositoryInterface`**: Fetch and save role entities.
+- **`PermissionRepositoryInterface`**: Fetch and save permission entities.
+- **`RolePermissionRepositoryInterface`**: Map role-to-permission pivots with constraints.
+- **`RoleParentRepositoryInterface`**: Manage role inheritance chains.
+- **`UserRoleRepositoryInterface`**: Map users to roles.
+- **`UserPermissionRepositoryInterface`**: Map direct user permissions.
+- **`UserDenyRepositoryInterface`**: Manage direct user permission blacklists.
+- **`UserRoleDenyRepositoryInterface`**: Manage user role exclusions.
+- **`AuditRepositoryInterface`**: Persist audit logs of access evaluations.
+
+---
+
+## 2. Framework Bootstrapping
+
+Bind your concrete storage repository implementations into the Vima Core Container:
+
+```php
+use Vima\Core\Support\Discovery\Container;
+use Vima\Core\Support\Discovery\CoreBootstrapper;
+use Vima\Core\Config\VimaConfig;
+use Vima\Core\Config\DTOs\PolicyConfig;
+use Vima\Core\Role\Contracts\RoleRepositoryInterface;
+use App\Repositories\Vima\MyFrameworkRoleRepository;
+
+// 1. Fetch singleton container instance
+$container = Container::getInstance();
+
+// 2. Register your database/repository drivers
+$container->register(RoleRepositoryInterface::class, fn(Container $c) => new MyFrameworkRoleRepository());
+// Register other repository contracts...
+
+// 3. Bind configuration DTO
+$container->register(VimaConfig::class, fn() => new VimaConfig(
+    superAdminRole: 'super-admin',
+    superAdminBypass: true,
+    policy: new PolicyConfig(
+        registered: [
+            \App\Policies\BlogPolicy::class,
+        ]
+    )
+));
+
+// 4. Load core dependency definitions
+CoreBootstrapper::bootstrap($container);
+```
+
+---
+
+## 3. Adapting Events and Cache
+
+Vima Core allows you to customize the Event Dispatcher and Caching mechanism to hook into your framework's pipelines.
+
+### Custom Event Dispatcher
+Implement `Vima\Core\Events\Contracts\EventDispatcherInterface` to forward audit logs and registration events to your framework's listener ecosystem:
+
+```php
+use Vima\Core\Events\Contracts\EventDispatcherInterface;
+
+class MyEventDispatcher implements EventDispatcherInterface
+{
+    public function dispatch(object $event): void
+    {
+        // Forward $event into your local framework event dispatch pipeline
+    }
+}
+
+// Bind in the container
+$container->register(EventDispatcherInterface::class, fn() => new MyEventDispatcher());
+```
+
+### Custom Cache Adapter
+Implement `Vima\Core\Cache\Contracts\CacheInterface` to optimize authorization queries by caching permission lookup trees:
+
+```php
+use Vima\Core\Cache\Contracts\CacheInterface;
+
+class MyCacheAdapter implements CacheInterface
+{
+    public function get(string $key): mixed { /* ... */ }
+    public function set(string $key, mixed $value, ?int $ttl = null): bool { /* ... */ }
+    public function clear(): bool { /* ... */ }
+}
+
+// Bind in the container
+$container->register(CacheInterface::class, fn() => new MyCacheAdapter());
+```

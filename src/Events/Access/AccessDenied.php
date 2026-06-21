@@ -23,6 +23,7 @@ class AccessDenied extends Event
             'permission' => $permission,
             'namespace' => $namespace,
             'arguments' => $arguments,
+            'level' => 'error',
         ]);
     }
 }

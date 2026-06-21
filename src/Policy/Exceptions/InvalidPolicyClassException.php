@@ -10,10 +10,11 @@
 
 declare(strict_types=1);
 
-namespace Vima\Core\User\Exceptions;
+namespace Vima\Core\Policy\Exceptions;
 
-use Vima\Core\Exceptions\VimaException;
+use InvalidArgumentException;
 
-class UserResolutionException extends VimaException
+final class InvalidPolicyClassException extends InvalidArgumentException
 {
+
 }

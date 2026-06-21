@@ -2,7 +2,7 @@
 /**
  * This file is part of Vima PHP.
  *
- * (c) Vima PHP <https://github.com/lipex-org>
+ * (c) Vima PHP <https://github.com/lipex-org/vima-core>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -12,6 +12,7 @@ declare(strict_types=1);
 
 namespace Vima\Core\User\Fluent;
 
+use Vima\Core\Events\DomainEvent;
 use Vima\Core\Role\Services\RoleService;
 use Vima\Core\Permission\Services\PermissionService;
 use Vima\Core\User\Contracts\UserRoleRepositoryInterface;
@@ -43,7 +44,26 @@ class UserGrant
     {
         $roleEntity = $this->roleService->find($role);
         if (!$roleEntity) {
-            // Should probably throw exception or create it if using declarative sync
+            if (is_string($role) && str_contains($role, ':')) {
+                [$ns, $name] = \Vima\Core\Support\Utils\Utils::resolveNamespace($role);
+                $baseRole = $this->roleService->find($name);
+                if ($baseRole) {
+                    $newRole = clone $baseRole;
+                    $newRole->id = null;
+                    $newRole->namespace = $ns;
+                    $newRole->name = $name;
+                    $roleEntity = $this->roleService->save($newRole);
+                    
+                    // Add mapped permissions from base role
+                    $baseRes = \Vima\Core\Vima::role($baseRole);
+                    $newRes = \Vima\Core\Vima::role($roleEntity);
+                    foreach ($baseRes->permissions()->all() as $bp) {
+                        $newRes->permissions()->add($bp);
+                    }
+                }
+            }
+        }
+        if (!$roleEntity) {
             return;
         }
 
@@ -52,6 +72,12 @@ class UserGrant
             roleId: $roleEntity->id,
             context: $context
         ));
+
+        $this->dispatcher->dispatch(new DomainEvent('vima.user.role_granted', [
+            'userId' => $this->userId,
+            'role' => $roleEntity,
+            'context' => $context
+        ]));
     }
 
     public function permission(string|Permission $permission, array $constraints = []): void
@@ -66,5 +92,11 @@ class UserGrant
             permissionId: $permissionEntity->id,
             constraints: $constraints
         ));
+
+        $this->dispatcher->dispatch(new DomainEvent('vima.user.permission_granted', [
+            'userId' => $this->userId,
+            'permission' => $permissionEntity,
+            'constraints' => $constraints
+        ]));
     }
 }

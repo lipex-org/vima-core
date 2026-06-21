@@ -54,4 +54,10 @@ class ArrayRoleParentRepository implements RoleParentRepositoryInterface
     {
         return array_values(array_filter($this->links, fn(RoleParent $rp) => $rp->parentId == $role->id));
     }
+
+    public function deleteAll(): void
+    {
+        $this->links = [];
+        $this->nextId = 1;
+    }
 }

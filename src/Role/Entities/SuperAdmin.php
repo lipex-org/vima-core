@@ -10,10 +10,8 @@
 
 declare(strict_types=1);
 
-namespace Vima\Core\User\Exceptions;
+namespace Vima\Core\Role\Entities;
 
-use Vima\Core\Exceptions\VimaException;
-
-class UserResolutionException extends VimaException
+class SuperAdmin extends Role
 {
 }

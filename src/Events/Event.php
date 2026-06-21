@@ -2,7 +2,7 @@
 /**
  * This file is part of Vima PHP.
  *
- * (c) Vima PHP <https://github.com/lipex-org>
+ * (c) Vima PHP <https://github.com/lipex-org/vima-core>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -77,5 +77,16 @@ abstract class Event
     public function getName(): string
     {
         return defined(static::class . '::NAME') ? static::NAME : static::class;
+    }
+
+    /**
+     * Get the log level for auditing purposes.
+     * Returns 'info' by default. Overridden by specific classes.
+     *
+     * @return string
+     */
+    public function getLogLevel(): string
+    {
+        return $this->data['level'] ?? 'info';
     }
 }

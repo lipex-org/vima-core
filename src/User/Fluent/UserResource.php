@@ -20,6 +20,7 @@ use Vima\Core\User\Contracts\UserDenyRepositoryInterface;
 use Vima\Core\User\Contracts\UserRoleDenyRepositoryInterface;
 use Vima\Core\Events\Contracts\EventDispatcherInterface;
 use Vima\Core\Config\VimaConfig;
+use Vima\Core\Cache\Contracts\CacheInterface;
 
 /**
  * Class UserResource
@@ -38,7 +39,8 @@ class UserResource
         private UserDenyRepositoryInterface $userDenies,
         private UserRoleDenyRepositoryInterface $userRoleDenies,
         private EventDispatcherInterface $dispatcher,
-        private VimaConfig $config
+        private VimaConfig $config,
+        private ?CacheInterface $cache = null
     ) {
     }
 
@@ -115,7 +117,8 @@ class UserResource
                 $this->permissionService,
                 $this->userDenies,
                 $this->userRoleDenies
-            )
+            ),
+            $this->config
         );
     }
 
@@ -135,7 +138,9 @@ class UserResource
                 $this->permissionService,
                 $this->userDenies,
                 $this->userRoleDenies
-            )
+            ),
+            $this->config,
+            $this->cache
         );
     }
 

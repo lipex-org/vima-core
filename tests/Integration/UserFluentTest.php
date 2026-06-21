@@ -76,4 +76,21 @@ class UserFluentTest extends TestCase
         $this->assertTrue(Vima::user($this->user)->has()->role('manager'));
         $this->assertFalse(Vima::user($this->user)->has()->role('non_existent'));
     }
+
+    public function testUserHasRoleBypassWithSuperAdmin()
+    {
+        $config = \Vima\Core\resolve(\Vima\Core\Config\VimaConfig::class);
+        $config->superAdminRole = 'super_admin';
+        $config->superAdminBypass = true;
+
+        Vima::roles()->save(new Role('super_admin'));
+        Vima::roles()->save(new Role('manager'));
+        
+        Vima::user($this->user)->grant()->role('super_admin');
+
+        $this->assertTrue(Vima::user($this->user)->has()->role('manager'));
+        
+        $config->superAdminRole = null;
+        $config->superAdminBypass = false;
+    }
 }

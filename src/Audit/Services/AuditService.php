@@ -17,6 +17,20 @@ class AuditService
 
     public function handleAuthorizationChecked(AuthorizationChecked $event): void
     {
+        $level = $event->getLogLevel();
+        $configLevel = $this->config->auditLevel ?? 'all';
+
+        // Filter logic:
+        // 'error': logs only error level events (e.g. AccessDenied)
+        // 'warning': logs warning and error level events
+        // 'all': logs everything
+        if ($configLevel === 'error' && $level !== 'error') {
+            return;
+        }
+        if ($configLevel === 'warning' && !in_array($level, ['warning', 'error'])) {
+            return;
+        }
+
         $data = $event->getData();
         $cols = $this->config->columns->auditLogs;
 

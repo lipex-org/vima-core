@@ -10,10 +10,12 @@
 
 declare(strict_types=1);
 
-namespace Vima\Core\User\Exceptions;
+namespace Vima\Core\Config\DTOs;
 
-use Vima\Core\Exceptions\VimaException;
-
-class UserResolutionException extends VimaException
+class PolicyConfig
 {
+    public function __construct(
+        public readonly array $registered = [],
+    ) {
+    }
 }

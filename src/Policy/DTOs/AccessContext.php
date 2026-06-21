@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace Vima\Core\Policy\DTOs;
 
-use Vima\Core\AuthorizationService;
-use Vima\Core\Services\UserResolver;
 use Vima\Core\Support\Utils\Utils;
 use function Vima\Core\resolve;
 class AccessContext
@@ -13,7 +11,7 @@ class AccessContext
     public function __construct(
         public object $user,
         public string $permission,
-        private AuthorizationService $manager,
+        private \Vima\Core\AuthorizationService $manager,
         public ?string $namespace = null,
         public array $additionalContext = [],
     ) {
@@ -24,34 +22,76 @@ class AccessContext
      */
     public function hasRole(string|array $roleName, bool $useAny = true): bool
     {
-        $roles = $this->manager->getUserRoles($this->user);
-        foreach ($roles as $role) {
-            if (is_array($roleName)) {
-                foreach ($roleName as $r) {
-                    if ($role->validateNamespacedName($r) && $useAny) {
+        $userService = resolve(\Vima\Core\User\Services\UserService::class);
+        $roleService = resolve(\Vima\Core\Role\Services\RoleService::class);
+        $roles = $userService->user($this->user)->get()->roles(true);
+
+        $tenantId = $this->user->tenant_id ?? null;
+        if ($tenantId !== null) {
+            $expectedNamespace = 'tenant_' . $tenantId;
+            $roles = array_filter($roles, function ($role) use ($expectedNamespace) {
+                return $role->namespace === null || $role->namespace === $expectedNamespace;
+            });
+        }
+
+        $hasRoleRecursive = function ($role, $target) use (&$hasRoleRecursive, $roleService) {
+            $fullName = $role->getFullName();
+            $simpleName = $role->name;
+            if ($fullName === $target || $simpleName === $target) {
+                return true;
+            }
+
+            // A user has $target role if any of their active roles inherits/includes $target.
+            $roleEntity = $roleService->find($role);
+            if ($roleEntity) {
+                // Check parent roles
+                $parents = $roleEntity->parents ?? [];
+                foreach ($parents as $parent) {
+                    $parentEntity = $roleService->find($parent);
+                    if ($parentEntity && $hasRoleRecursive($parentEntity, $target)) {
                         return true;
                     }
+                }
 
-                    if (!$useAny && !$role->validateNamespacedName($r)) {
-                        return false;
+                // Let's also check database parent relationships.
+                $roleParentsRepo = resolve(\Vima\Core\Role\Contracts\RoleParentRepositoryInterface::class);
+                $parentRelations = $roleParentsRepo->getParents($roleEntity);
+                foreach ($parentRelations as $rel) {
+                    $parentEntity = $roleService->find($rel->parentId);
+                    if ($parentEntity && $parentEntity->getFullName() !== $roleEntity->getFullName() && $hasRoleRecursive($parentEntity, $target)) {
+                        return true;
                     }
                 }
-            } else {
-                if ($role->validateNamespacedName($roleName) && $useAny) {
-                    return true;
-                }
+            }
+            return false;
+        };
 
-                if (!$useAny && !$role->validateNamespacedName($roleName)) {
+        $targets = is_array($roleName) ? $roleName : [$roleName];
+
+        if ($useAny) {
+            foreach ($roles as $role) {
+                foreach ($targets as $target) {
+                    if ($hasRoleRecursive($role, $target)) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        } else {
+            foreach ($targets as $target) {
+                $found = false;
+                foreach ($roles as $role) {
+                    if ($hasRoleRecursive($role, $target)) {
+                        $found = true;
+                        break;
+                    }
+                }
+                if (!$found) {
                     return false;
                 }
             }
+            return true;
         }
-
-        if ($useAny) {
-            return false;
-        }
-
-        return true;
     }
 
     /**
@@ -126,8 +166,8 @@ class AccessContext
 
     public function resolveId(): int|string|null
     {
-        /** @var UserResolver $userResolver */
-        $userResolver = resolve(UserResolver::class);
+        /** @var \Vima\Core\User\Services\UserResolutionService $userResolver */
+        $userResolver = resolve(\Vima\Core\User\Services\UserResolutionService::class);
         return $userResolver->resolveId($this->user);
     }
 }

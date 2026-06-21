@@ -34,6 +34,6 @@ class VimaConfigTest extends TestCase
         $this->assertFalse($config->cacheEnabled);
         $this->assertEquals(3600, $config->cacheTTL);
         $this->assertTrue($config->superAdminBypass);
-        $this->assertEquals('roles', $config->tables->roles); // Default no prefix
+        $this->assertEquals('vima_roles', $config->tables->roles); // Default vima_ prefix
     }
 }

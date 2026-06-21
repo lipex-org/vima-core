@@ -2,7 +2,7 @@
 /**
  * This file is part of Vima PHP.
  *
- * (c) Vima PHP <https://github.com/lipex-org>
+ * (c) Vima PHP <https://github.com/lipex-org/vima-core>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -52,15 +52,24 @@ class CoreBootstrapper
         // Bind singletons for interfaces
         $container->register(CacheInterface::class, fn() => new SymfonyCacheAdapter());
         $container->register(EventDispatcherInterface::class, fn() => new DefaultEventDispatcher());
-        $container->register(VimaConfig::class, fn() => new VimaConfig());
+
+        if (!$container->get(VimaConfig::class)) {
+            $container->register(VimaConfig::class, fn() => new VimaConfig());
+        }
 
         // We assume repos are bound externally by the consumer (e.g. CI4 or Laravel bridge).
         // For testing, we could bind arrays or mock repositories here.
 
         // Register core services
-        $container->register(PolicyRegistry::class, fn($c) => new PolicyRegistry($c->get(EventDispatcherInterface::class), $c->get(CacheInterface::class)));
+        $container->register(PolicyRegistry::class, fn($c) => new PolicyRegistry(
+            $c->get(EventDispatcherInterface::class),
+            $c->get(CacheInterface::class),
+            $c->get(VimaConfig::class)
+        ));
 
-        $container->register(UserResolutionService::class, fn($c) => new UserResolutionService($c->get(VimaConfig::class)));
+        $container->register(UserResolutionService::class, fn($c) => new UserResolutionService(
+            $c->get(VimaConfig::class)
+        ));
 
         $container->register(RoleService::class, fn($c) => new RoleService(
             $c->get(RoleRepositoryInterface::class),
@@ -83,7 +92,8 @@ class CoreBootstrapper
             $c->get(UserDenyRepositoryInterface::class),
             $c->get(UserRoleDenyRepositoryInterface::class),
             $c->get(EventDispatcherInterface::class),
-            $c->get(VimaConfig::class)
+            $c->get(VimaConfig::class),
+            $c->get(CacheInterface::class)
         ));
 
         $container->register(AuthorizationService::class, fn($c) => new AuthorizationService(

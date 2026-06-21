@@ -19,19 +19,19 @@ class RoleFluentTest extends TestCase
 
         Vima::role('editor')
             ->permissions()
-            ->add($perm1->id)
-            ->add($perm2->id);
+            ->add($perm1)
+            ->add($perm2);
 
         $rolePerms = Vima::role('editor')->permissions()->all();
 
         $this->assertCount(2, $rolePerms);
-        $this->assertEquals($perm1->id, $rolePerms[0]->permissionId);
+        $this->assertEquals($perm1->id, $rolePerms[0]->id);
 
-        Vima::role('editor')->permissions()->remove($perm1->id);
+        Vima::role('editor')->permissions()->remove($perm1);
 
         $rolePermsAfter = Vima::role('editor')->permissions()->all();
         $this->assertCount(1, $rolePermsAfter);
-        $this->assertEquals($perm2->id, $rolePermsAfter[0]->permissionId);
+        $this->assertEquals($perm2->id, $rolePermsAfter[0]->id);
     }
 
     public function testRoleFluentParentsBuilder()

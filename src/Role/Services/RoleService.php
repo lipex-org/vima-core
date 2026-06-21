@@ -2,7 +2,7 @@
 /**
  * This file is part of Vima PHP.
  *
- * (c) Vima PHP <https://github.com/lipex-org>
+ * (c) Vima PHP <https://github.com/lipex-org/vima-core>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -13,6 +13,7 @@ declare(strict_types=1);
 namespace Vima\Core\Role\Services;
 
 use Vima\Core\Events\Contracts\EventDispatcherInterface;
+use Vima\Core\Events\DomainEvent;
 use Vima\Core\Role\Contracts\RoleRepositoryInterface;
 use Vima\Core\Role\Contracts\RolePermissionRepositoryInterface;
 use Vima\Core\Role\Contracts\RoleParentRepositoryInterface;
@@ -20,6 +21,7 @@ use Vima\Core\Role\Entities\Role;
 use Vima\Core\Permission\Entities\Permission;
 use Vima\Core\Role\Fluent\RoleResource;
 use Vima\Core\Support\Utils\Utils;
+use function Jengo\Base\Support\arr;
 
 /**
  * Class RoleService
@@ -39,12 +41,9 @@ class RoleService
     public function role(int|string|Role $role): RoleResource
     {
         $roleEntity = $this->find($role);
-        if (!$roleEntity) {
-            throw new \RuntimeException("Role not found.");
-        }
 
         return new RoleResource(
-            $roleEntity,
+            $roleEntity ?? $role,
             $this,
             $this->rolePermissions,
             $this->roleParents,
@@ -52,14 +51,14 @@ class RoleService
         );
     }
 
-    public function find(int|string|Role $role): ?Role
+    public function find(int|string|Role $role, bool $resolve = false): ?Role
     {
         $id = null;
         $name = null;
         $namespace = null;
 
-        if (is_int($role)) {
-            $id = $role;
+        if (is_int($role) || (is_string($role) && ctype_digit($role))) {
+            $id = (int) $role;
         } elseif (is_string($role)) {
             [$namespace, $name] = Utils::resolveNamespace($role);
         } else {
@@ -68,76 +67,74 @@ class RoleService
             $namespace = $role->namespace;
         }
 
+        $fullName = $namespace ? "{$namespace}:{$name}" : $name;
+
+        $foundRole = null;
         if ($id) {
-            return $this->roles->findById($id);
+            $foundRole = $this->roles->findById($id);
         }
 
-        // We assume the repository findByName takes the fully qualified name or 
-        // we format it here if the repository still splits it. 
-        // Let's pass the full name namespace:name to findByName so the repo can parse it, 
-        // or we pass the resolved name and namespace if the repo interface allowed it. 
-        // Since we removed $namespace from findByName, we must pass the full string.
-        $fullName = $namespace ? "{$namespace}:{$name}" : $name;
-        return $this->roles->findByName($fullName);
+        if (!$foundRole) {
+            $foundRole = $this->roles->findByName($fullName);
+        }
+
+        if ($resolve && $foundRole) {
+            return $this->resolve($foundRole);
+        }
+
+        return $foundRole;
     }
 
     public function save(Role $role): Role
     {
-        return $this->roles->save($role);
+        $isNew = ($role->id === null);
+        $saved = $this->roles->save($role);
+        $eventName = $isNew ? 'vima.role.created' : 'vima.role.updated';
+        $this->dispatcher->dispatch(new DomainEvent($eventName, ['role' => $saved]));
+        return $saved;
     }
 
     public function delete(Role $role): void
     {
         $this->roles->delete($role);
+        $this->dispatcher->dispatch(new DomainEvent('vima.role.deleted', ['role' => $role]));
     }
 
     /**
      * @param string|null $namespace
      * @return Role[]
      */
-    public function all(?string $namespace = null): array
+    public function all(?string $namespace = null, bool $resolve = false): array
     {
-        return $this->roles->all($namespace);
+        $roles = $this->roles->all($namespace);
+
+        if ($resolve) {
+            $roles = arr($roles)
+                ->map(fn(Role $role) => $this->resolve($role))
+                ->toArray();
+        }
+
+        return $roles;
     }
 
-    /**
-     * Gets all permissions assigned to a role and its parents.
-     * 
-     * @param string|Role $role
-     * @param array $visited
-     * @return Permission[]
-     */
-    public function getRolePermissions(string|Role $role, array &$visited = []): array
+    public function toRole(Role|string|int $role): ?Role
     {
-        $roleEntity = $this->find($role);
-        if (!$roleEntity) {
-            return [];
+        if (is_string($role)) {
+            $role = Role::define($role);
         }
 
-        $roleKey = $roleEntity->getFullName();
-        if (in_array($roleKey, $visited)) {
-            return [];
-        }
-        $visited[] = $roleKey;
-
-        $perms = [];
-        $permissionService = \Vima\Core\Support\Discovery\Container::getInstance()->get(\Vima\Core\Permission\Services\PermissionService::class);
-
-        $rolePerms = $this->rolePermissions->getRolePermissions($roleEntity);
-        foreach ($rolePerms as $rp) {
-            $perm = $permissionService->find($rp->permissionId);
-            if ($perm) {
-                $p = clone $perm;
-                $p->constraints = $rp->constraints ?? [];
-                $perms[] = $p;
-            }
+        if (is_int($role)) {
+            $role = $this->find($role);
         }
 
-        $parents = $this->roleParents->getParents($roleEntity);
-        foreach ($parents as $parent) {
-            $perms = array_merge($perms, $this->getRolePermissions((string)$parent->parentId, $visited));
-        }
+        return $role;
+    }
 
-        return $perms;
+    private function resolve(Role $role): Role
+    {
+        $role->permissions = $this->role($role)->permissions()->all();
+        $role->parents = $this->roleParents->getParents($role);
+        $role->children = $this->roleParents->getChildren($role);
+        return $role;
     }
 }

@@ -2,7 +2,7 @@
 /**
  * This file is part of Vima PHP.
  *
- * (c) Vima PHP <https://github.com/lipex-org>
+ * (c) Vima PHP <https://github.com/lipex-org/vima-core>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -29,8 +29,19 @@ class UserGetPermissions
 
     public function all(array $context = []): array
     {
-        // ... (This evaluates both direct permissions and roles' permissions)
-        return [];
+        $compiled = $this->userGet->compiled($context);
+        $perms = [];
+        foreach ($compiled as $fullName => $constraintsArray) {
+            $existing = $this->permissionService->find($fullName);
+            if ($existing) {
+                foreach ($constraintsArray as $constraints) {
+                    $p = clone $existing;
+                    $p->constraints = $constraints;
+                    $perms[] = $p;
+                }
+            }
+        }
+        return $perms;
     }
 
     public function direct(): array
