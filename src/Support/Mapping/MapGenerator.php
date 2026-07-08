@@ -33,7 +33,17 @@ class MapGenerator
     public function generateRoles(Setup $setup, string $namespace): string
     {
         $roleNames = array_map(fn($role) => $role->namespace ? $role->namespace . ':' . $role->name : $role->name, $setup->roles);
-        $this->mappingService->sync($roleNames, 'roles');
+
+        $dbRoleNames = [];
+        try {
+            $dbRoles = \Vima\Core\Vima::roles()->all();
+            $dbRoleNames = array_map(fn($role) => $role->namespace ? $role->namespace . ':' . $role->name : $role->name, $dbRoles);
+        } catch (\Throwable $e) {
+            // Database not connected or tables not migrated yet
+        }
+
+        $allRoleNames = array_unique(array_merge($roleNames, $dbRoleNames));
+        $this->mappingService->sync($allRoleNames, 'roles');
         $this->mappingService->save();
 
         $map = $this->mappingService->all('roles');
@@ -57,7 +67,16 @@ class MapGenerator
             }
         }
 
-        $this->mappingService->sync($permissionNames, 'permissions');
+        $dbPermNames = [];
+        try {
+            $dbPerms = \Vima\Core\Vima::permissions()->all();
+            $dbPermNames = array_map(fn($perm) => $perm->namespace ? $perm->namespace . ':' . $perm->name : $perm->name, $dbPerms);
+        } catch (\Throwable $e) {
+            // Database not connected or tables not migrated yet
+        }
+
+        $allPermissionNames = array_unique(array_merge($permissionNames, $dbPermNames));
+        $this->mappingService->sync($allPermissionNames, 'permissions');
         $this->mappingService->save();
 
         $map = $this->mappingService->all('permissions');
