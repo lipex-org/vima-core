@@ -35,8 +35,15 @@ class UserRevoke
     ) {
     }
 
-    public function role(string|Role $role): void
+    public function role(string|Role|array $role): void
     {
+        if (is_array($role)) {
+            foreach ($role as $r) {
+                $this->role($r);
+            }
+            return;
+        }
+
         $roleEntity = $this->roleService->find($role);
         if (!$roleEntity) {
             return;
@@ -52,8 +59,15 @@ class UserRevoke
         ]));
     }
 
-    public function permission(string|Permission $permission): void
+    public function permission(string|Permission|array $permission): void
     {
+        if (is_array($permission)) {
+            foreach ($permission as $p) {
+                $this->permission($p);
+            }
+            return;
+        }
+
         $permissionEntity = $this->permissionService->find($permission);
         if (!$permissionEntity) {
             return;

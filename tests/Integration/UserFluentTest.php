@@ -92,5 +92,30 @@ class UserFluentTest extends TestCase
         
         $config->superAdminRole = null;
         $config->superAdminBypass = false;
-    }
+     }
+
+     public function testUserBulkGrantAndRevoke()
+     {
+         Vima::roles()->save(new Role('bulk_role_1'));
+         Vima::roles()->save(new Role('bulk_role_2'));
+         Vima::permissions()->save(new Permission('bulk_perm_1'));
+         Vima::permissions()->save(new Permission('bulk_perm_2'));
+
+         // Bulk grant roles and permissions
+         Vima::user($this->user)->grant()->role(['bulk_role_1', 'bulk_role_2' => ['context_key' => 'context_val']]);
+         Vima::user($this->user)->grant()->permission(['bulk_perm_1', 'bulk_perm_2' => ['scope' => 'admin']]);
+
+         $roles = Vima::user($this->user)->get()->roles();
+         $this->assertCount(2, $roles);
+
+         $directPerms = Vima::user($this->user)->get()->permissions()->direct();
+         $this->assertCount(2, $directPerms);
+
+         // Bulk revoke
+         Vima::user($this->user)->revoke()->role(['bulk_role_1', 'bulk_role_2']);
+         Vima::user($this->user)->revoke()->permission(['bulk_perm_1', 'bulk_perm_2']);
+
+         $this->assertEmpty(Vima::user($this->user)->get()->roles());
+         $this->assertEmpty(Vima::user($this->user)->get()->permissions()->direct());
+     }
 }

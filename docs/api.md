@@ -33,8 +33,8 @@ Returns a `RoleResource` instance.
 - **`original(): Role`**: Retrieves the raw database `Role` entity.
 - **`delete(): void`**: Deletes the role.
 - **`permissions(): RolePermissionsBuilder`**:
-  - **`add(string|Permission $permission, array $constraints = []): self`**: Grants a permission to this role.
-  - **`remove(string|Permission $permission): self`**: Revokes a permission.
+  - **`add(string|Permission|array $permission, array $constraints = []): self`**: Grants a permission or an array of permissions (bulk) to this role.
+  - **`remove(string|Permission|array $permission): self`**: Revokes a permission or an array of permissions (bulk) from this role.
   - **`all(): array`**: Returns all permissions associated with this role, including inherited parent permissions.
 - **`parents(): RoleParentsBuilder`**:
   - **`add(string|int $parentId): self`**: Sets a parent role to inherit permissions from.
@@ -48,6 +48,12 @@ Returns a `PermissionResource` instance.
 
 ### `Vima::user(object $user): UserResource`
 Returns a `UserResource` wrapper for user-specific assignment checks:
+- **`grant(): UserGrant`**: Grant roles or permissions to this user.
+  - **`role(string|Role|array $role, array $context = []): void`**: Grants a role or an array of roles (bulk) to the user.
+  - **`permission(string|Permission|array $permission, array $constraints = []): void`**: Grants a direct permission or an array of direct permissions (bulk) to the user.
+- **`revoke(): UserRevoke`**: Revoke roles or permissions from this user.
+  - **`role(string|Role|array $role): void`**: Revokes a role or an array of roles (bulk) from the user.
+  - **`permission(string|Permission|array $permission): void`**: Revokes a direct permission or an array of direct permissions (bulk) from the user.
 - **`roles(): UserRolesBuilder`**: Assign, revoke, or retrieve roles for this specific user.
 - **`permissions(): UserPermissionsBuilder`**: Grant, revoke, or retrieve direct permissions for this specific user.
 

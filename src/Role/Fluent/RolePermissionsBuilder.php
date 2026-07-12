@@ -35,8 +35,19 @@ class RolePermissionsBuilder
         $this->permissionService = resolve(PermissionService::class);
     }
 
-    public function add(string|Permission $permission, array $constraints = []): self
+    public function add(string|Permission|array $permission, array $constraints = []): self
     {
+        if (is_array($permission)) {
+            foreach ($permission as $key => $value) {
+                if (is_string($key)) {
+                    $this->add($key, is_array($value) ? $value : $constraints);
+                } else {
+                    $this->add($value, $constraints);
+                }
+            }
+            return $this;
+        }
+
         $p = ($permission instanceof Permission && $permission->id !== null) ? $permission : $this->permissionService->find($permission);
 
         if (!$p) {
@@ -51,8 +62,15 @@ class RolePermissionsBuilder
         return $this;
     }
 
-    public function remove(string|Permission $permission): self
+    public function remove(string|Permission|array $permission): self
     {
+        if (is_array($permission)) {
+            foreach ($permission as $p) {
+                $this->remove($p);
+            }
+            return $this;
+        }
+
         $p = $this->permissionService->find($permission);
 
         if (!$p) {

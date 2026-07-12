@@ -40,8 +40,19 @@ class UserGrant
     ) {
     }
 
-    public function role(string|Role $role, array $context = []): void
+    public function role(string|Role|array $role, array $context = []): void
     {
+        if (is_array($role)) {
+            foreach ($role as $key => $value) {
+                if (is_string($key)) {
+                    $this->role($key, is_array($value) ? $value : $context);
+                } else {
+                    $this->role($value, $context);
+                }
+            }
+            return;
+        }
+
         $roleEntity = $this->roleService->find($role);
         if (!$roleEntity) {
             if (is_string($role) && str_contains($role, ':')) {
@@ -80,8 +91,19 @@ class UserGrant
         ]));
     }
 
-    public function permission(string|Permission $permission, array $constraints = []): void
+    public function permission(string|Permission|array $permission, array $constraints = []): void
     {
+        if (is_array($permission)) {
+            foreach ($permission as $key => $value) {
+                if (is_string($key)) {
+                    $this->permission($key, is_array($value) ? $value : $constraints);
+                } else {
+                    $this->permission($value, $constraints);
+                }
+            }
+            return;
+        }
+
         $permissionEntity = $this->permissionService->find($permission);
         if (!$permissionEntity) {
             return;

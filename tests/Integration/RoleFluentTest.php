@@ -53,4 +53,38 @@ class RoleFluentTest extends TestCase
 
         $this->assertEmpty(Vima::role('child')->parents()->all());
     }
+
+    public function testRoleFluentBulkPermissions()
+    {
+        $role = Vima::roles()->save(new Role('bulk_role'));
+        $perm1 = Vima::permissions()->save(new Permission('bulk.one'));
+        $perm2 = Vima::permissions()->save(new Permission('bulk.two'));
+        $perm3 = Vima::permissions()->save(new Permission('bulk.three'));
+
+        // Bulk add with string, Permission object, and constraints
+        Vima::role('bulk_role')
+            ->permissions()
+            ->add([
+                'bulk.one',
+                $perm2,
+                'bulk.three' => ['scope' => 'custom']
+            ]);
+
+        $rolePerms = Vima::role('bulk_role')->permissions()->all();
+        $this->assertCount(3, $rolePerms);
+
+        // Verify the constraints were applied correctly
+        foreach ($rolePerms as $rp) {
+            if ($rp->name === 'bulk.three') {
+                $this->assertEquals(['scope' => 'custom'], $rp->constraints);
+            }
+        }
+
+        // Bulk remove
+        Vima::role('bulk_role')->permissions()->remove(['bulk.one', $perm2]);
+
+        $rolePermsAfter = Vima::role('bulk_role')->permissions()->all();
+        $this->assertCount(1, $rolePermsAfter);
+        $this->assertEquals('bulk.three', $rolePermsAfter[0]->name);
+    }
 }
