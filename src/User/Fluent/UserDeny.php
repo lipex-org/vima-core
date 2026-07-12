@@ -40,8 +40,27 @@ class UserDeny
     ) {
     }
 
-    public function role(string|Role $role, ?string $reason = null, ?DateTimeInterface $expiresAt = null): void
+    public function role(string|Role|array $role, ?string $reason = null, ?DateTimeInterface $expiresAt = null): void
     {
+        if (is_array($role)) {
+            foreach ($role as $key => $value) {
+                if (is_string($key)) {
+                    if (is_array($value)) {
+                        $this->role(
+                            $key,
+                            $value['reason'] ?? $value[0] ?? $reason,
+                            $value['expiresAt'] ?? $value['expires'] ?? $value[1] ?? $expiresAt
+                        );
+                    } else {
+                        $this->role($key, $value, $expiresAt);
+                    }
+                } else {
+                    $this->role($value, $reason, $expiresAt);
+                }
+            }
+            return;
+        }
+
         $roleEntity = $this->roleService->find($role);
         if (!$roleEntity) {
             return;
@@ -62,8 +81,27 @@ class UserDeny
         ]));
     }
 
-    public function permission(string|Permission $permission, ?string $reason = null, ?DateTimeInterface $expiresAt = null): void
+    public function permission(string|Permission|array $permission, ?string $reason = null, ?DateTimeInterface $expiresAt = null): void
     {
+        if (is_array($permission)) {
+            foreach ($permission as $key => $value) {
+                if (is_string($key)) {
+                    if (is_array($value)) {
+                        $this->permission(
+                            $key,
+                            $value['reason'] ?? $value[0] ?? $reason,
+                            $value['expiresAt'] ?? $value['expires'] ?? $value[1] ?? $expiresAt
+                        );
+                    } else {
+                        $this->permission($key, $value, $expiresAt);
+                    }
+                } else {
+                    $this->permission($value, $reason, $expiresAt);
+                }
+            }
+            return;
+        }
+
         $permissionEntity = $this->permissionService->find($permission);
         if (!$permissionEntity) {
             return;

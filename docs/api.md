@@ -54,6 +54,12 @@ Returns a `UserResource` wrapper for user-specific assignment checks:
 - **`revoke(): UserRevoke`**: Revoke roles or permissions from this user.
   - **`role(string|Role|array $role): void`**: Revokes a role or an array of roles (bulk) from the user.
   - **`permission(string|Permission|array $permission): void`**: Revokes a direct permission or an array of direct permissions (bulk) from the user.
+- **`deny(): UserDeny`**: Explicitly deny roles or permissions to this user.
+  - **`role(string|Role|array $role, ?string $reason = null, ?DateTimeInterface $expiresAt = null): void`**: Denies a role or an array of roles (bulk) to the user.
+  - **`permission(string|Permission|array $permission, ?string $reason = null, ?DateTimeInterface $expiresAt = null): void`**: Denies a permission or an array of permissions (bulk) to the user.
+- **`undeny(): UserUndeny`**: Remove explicit denials of roles or permissions from this user.
+  - **`role(string|Role|array $role): void`**: Removes a denial for a role or an array of roles (bulk).
+  - **`permission(string|Permission|array $permission): void`**: Removes a denial for a permission or an array of permissions (bulk).
 - **`roles(): UserRolesBuilder`**: Assign, revoke, or retrieve roles for this specific user.
 - **`permissions(): UserPermissionsBuilder`**: Grant, revoke, or retrieve direct permissions for this specific user.
 
