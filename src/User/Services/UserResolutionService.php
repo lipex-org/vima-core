@@ -31,23 +31,25 @@ final class UserResolutionService
     {
         $resolvedId = null;
 
-        if (method_exists($user, 'vimaGetId')) {
+        if (is_object($user) && method_exists($user, 'vimaGetId')) {
             $resolvedId = $user->vimaGetId();
-        } elseif ($this->config?->userMethods?->id !== null) {
-            $mappedMethod = $this->config?->userMethods?->id;
-            if ($mappedMethod && method_exists($user, $mappedMethod)) {
+        }
+
+        if ($resolvedId === null && is_object($user) && !empty($this->config?->userMethods?->id)) {
+            $mappedMethod = $this->config->userMethods->id;
+            if (method_exists($user, $mappedMethod)) {
                 $resolvedId = $user->{$mappedMethod}();
-            }
-        } elseif (is_array($user)) {
-            throw new UserResolutionException("Use the Vima::userResolver property to provide a resolver for the user");
-        } else {
-            if ($this->config?->userResolver !== null) {
-                $resolvedId = ($this->config->userResolver)($user);
             }
         }
 
+        if ($resolvedId === null && $this->config?->userResolver !== null) {
+            $resolvedId = ($this->config->userResolver)($user);
+        }
+
         if ($resolvedId === null) {
-            throw new UserResolutionException('Could not resolve user ID.');
+            throw new UserResolutionException(
+                "Could not resolve user ID. Configure Vima::userResolver or ensure a valid user method is defined."
+            );
         }
 
         return is_scalar($resolvedId) ? (string) $resolvedId : $resolvedId;
