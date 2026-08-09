@@ -30,16 +30,19 @@ final class UserResolutionService
     public function resolveId(object|array $user): int|string
     {
         $resolvedId = null;
-        if ($this->config?->userResolver !== null) {
-            $resolvedId = ($this->config->userResolver)($user);
-        } elseif (is_array($user)) {
-            throw new UserResolutionException("Use the Vima::userResolver property to provide a resolver for the user");
-        } elseif (method_exists($user, 'vimaGetId')) {
+
+        if (method_exists($user, 'vimaGetId')) {
             $resolvedId = $user->vimaGetId();
-        } else {
-            $mappedMethod = $this->config?->userMethods?->id ?? null;
+        } elseif ($this->config?->userMethods?->id !== null) {
+            $mappedMethod = $this->config?->userMethods?->id;
             if ($mappedMethod && method_exists($user, $mappedMethod)) {
                 $resolvedId = $user->{$mappedMethod}();
+            }
+        } elseif (is_array($user)) {
+            throw new UserResolutionException("Use the Vima::userResolver property to provide a resolver for the user");
+        } else {
+            if ($this->config?->userResolver !== null) {
+                $resolvedId = ($this->config->userResolver)($user);
             }
         }
 
