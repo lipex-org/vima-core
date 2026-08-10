@@ -10,10 +10,16 @@
 
 declare(strict_types=1);
 
-namespace Vima\Core\User\Exceptions;
+namespace Vima\Core\Exceptions;
 
-use Exception;
-
-class UserResolutionException extends Exception
+/**
+ * Interface for exceptions thrown when access is denied.
+ */
+interface AccessDeniedExceptionInterface
 {
+    public function getPermission(): string;
+
+    public function getUser(): mixed;
+
+    public function getUserId(): ?string;
 }
