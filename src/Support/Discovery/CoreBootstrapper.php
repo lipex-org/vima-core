@@ -38,7 +38,8 @@ use Vima\Core\Permission\Services\PermissionService;
 use Vima\Core\User\Services\UserService;
 use Vima\Core\User\Services\UserResolutionService;
 use Vima\Core\Policy\Services\PolicyRegistry;
-use Vima\Core\AuthorizationService;
+use Vima\Core\Exceptions\AccessDeniedExceptionFactoryInterface;
+use Vima\Core\Exceptions\DefaultAccessDeniedExceptionFactory;
 
 /**
  * Class CoreBootstrapper
@@ -52,6 +53,7 @@ class CoreBootstrapper
         // Bind singletons for interfaces
         $container->register(CacheInterface::class, fn() => new SymfonyCacheAdapter());
         $container->register(EventDispatcherInterface::class, fn() => new DefaultEventDispatcher());
+        $container->register(AccessDeniedExceptionFactoryInterface::class, fn() => new DefaultAccessDeniedExceptionFactory());
 
         if (!$container->get(VimaConfig::class)) {
             $container->register(VimaConfig::class, fn() => new VimaConfig());

@@ -20,18 +20,6 @@ use RuntimeException;
  */
 class AccessDeniedException extends RuntimeException implements AccessDeniedExceptionInterface
 {
-    private static ?Closure $factory = null;
-
-    /**
-     * Set a custom factory callback to instantiate the exception.
-     * The callback should receive (string $permission, mixed $user, mixed $userResolver)
-     * and return an instance of Throwable implementing AccessDeniedExceptionInterface.
-     */
-    public static function useFactory(?Closure $factory): void
-    {
-        self::$factory = $factory;
-    }
-
     public function __construct(
         public readonly string $permission,
         public readonly mixed $user = null,
@@ -62,8 +50,9 @@ class AccessDeniedException extends RuntimeException implements AccessDeniedExce
 
     public static function forPermission(string $permission, mixed $user = null, mixed $userResolver = null): \Throwable&AccessDeniedExceptionInterface
     {
-        if (self::$factory !== null) {
-            return (self::$factory)($permission, $user, $userResolver);
+        $container = \Vima\Core\Support\Discovery\Container::getInstance();
+        if ($container->has(AccessDeniedExceptionFactoryInterface::class)) {
+            return $container->get(AccessDeniedExceptionFactoryInterface::class)->create($permission, $user, $userResolver);
         }
 
         $userId = null;
