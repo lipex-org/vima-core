@@ -2,7 +2,7 @@
 
 namespace Vima\Core\Tests\Unit\Exceptions;
 
-use PHPUnit\Framework\TestCase;
+use Vima\Core\Tests\TestCase;
 use Vima\Core\Exceptions\AccessDeniedException;
 use Vima\Core\Exceptions\AccessDeniedExceptionInterface;
 
@@ -10,8 +10,11 @@ class AccessDeniedExceptionTest extends TestCase
 {
     protected function tearDown(): void
     {
-        // Reset the factory
-        AccessDeniedException::useFactory(null);
+        // Reset the factory to default
+        \Vima\Core\Support\Discovery\Container::getInstance()->register(
+            \Vima\Core\Exceptions\AccessDeniedExceptionFactoryInterface::class,
+            fn() => new \Vima\Core\Exceptions\DefaultAccessDeniedExceptionFactory()
+        );
         parent::tearDown();
     }
 
@@ -47,7 +50,18 @@ class AccessDeniedExceptionTest extends TestCase
             }
         };
 
-        AccessDeniedException::useFactory(fn($permission, $user, $resolver) => $customException);
+        $factoryMock = new class($customException) implements \Vima\Core\Exceptions\AccessDeniedExceptionFactoryInterface {
+            public function __construct(private \Throwable&AccessDeniedExceptionInterface $exception) {}
+            public function create(string $permission, mixed $user = null, mixed $userResolver = null): \Throwable&AccessDeniedExceptionInterface
+            {
+                return $this->exception;
+            }
+        };
+
+        \Vima\Core\Support\Discovery\Container::getInstance()->register(
+            \Vima\Core\Exceptions\AccessDeniedExceptionFactoryInterface::class,
+            fn() => $factoryMock
+        );
 
         $exception = AccessDeniedException::forPermission('custom.permission');
 
