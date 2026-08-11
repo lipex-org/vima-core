@@ -14,6 +14,7 @@ namespace Vima\Core\Exceptions;
 
 use Closure;
 use RuntimeException;
+use function Vima\Core\container;
 
 /**
  * Exception thrown when a user is not authorized to perform an action.
@@ -50,9 +51,10 @@ class AccessDeniedException extends RuntimeException implements AccessDeniedExce
 
     public static function forPermission(string $permission, mixed $user = null, mixed $userResolver = null): \Throwable&AccessDeniedExceptionInterface
     {
-        $container = \Vima\Core\Support\Discovery\Container::getInstance();
-        if ($container->has(AccessDeniedExceptionFactoryInterface::class)) {
-            return $container->get(AccessDeniedExceptionFactoryInterface::class)->create($permission, $user, $userResolver);
+        if (container()->has(AccessDeniedExceptionFactoryInterface::class)) {
+            return container()
+                ->get(AccessDeniedExceptionFactoryInterface::class)
+                ->create($permission, $user, $userResolver);
         }
 
         $userId = null;
