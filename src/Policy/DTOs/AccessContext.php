@@ -4,14 +4,20 @@ declare(strict_types=1);
 
 namespace Vima\Core\Policy\DTOs;
 
+use Vima\Core\AuthorizationService;
+use Vima\Core\Role\Contracts\RoleParentRepositoryInterface;
+use Vima\Core\Role\Services\RoleService;
 use Vima\Core\Support\Utils\Utils;
+use Vima\Core\User\Services\UserResolutionService;
+use Vima\Core\User\Services\UserService;
 use function Vima\Core\resolve;
+
 class AccessContext
 {
     public function __construct(
         public object $user,
         public string $permission,
-        private \Vima\Core\AuthorizationService $manager,
+        private AuthorizationService $manager,
         public ?string $namespace = null,
         public array $additionalContext = [],
     ) {
@@ -22,8 +28,8 @@ class AccessContext
      */
     public function hasRole(string|array $roleName, bool $useAny = true): bool
     {
-        $userService = resolve(\Vima\Core\User\Services\UserService::class);
-        $roleService = resolve(\Vima\Core\Role\Services\RoleService::class);
+        $userService = resolve(UserService::class);
+        $roleService = resolve(RoleService::class);
         $roles = $userService->user($this->user)->get()->roles(true);
 
         $tenantId = $this->user->tenant_id ?? null;
@@ -54,7 +60,7 @@ class AccessContext
                 }
 
                 // Let's also check database parent relationships.
-                $roleParentsRepo = resolve(\Vima\Core\Role\Contracts\RoleParentRepositoryInterface::class);
+                $roleParentsRepo = resolve(RoleParentRepositoryInterface::class);
                 $parentRelations = $roleParentsRepo->getParents($roleEntity);
                 foreach ($parentRelations as $rel) {
                     $parentEntity = $roleService->find($rel->parentId);
@@ -160,14 +166,14 @@ class AccessContext
      */
     public function can(string $permission): bool
     {
-        [$namespace, $name] = Utils::splitPermission($permission);
+        [$namespace, $name] = Utils::resolveNamespace($permission);
         return $this->manager->can($this->user, $name, $namespace);
     }
 
     public function resolveId(): int|string|null
     {
-        /** @var \Vima\Core\User\Services\UserResolutionService $userResolver */
-        $userResolver = resolve(\Vima\Core\User\Services\UserResolutionService::class);
+        /** @var UserResolutionService $userResolver */
+        $userResolver = resolve(UserResolutionService::class);
         return $userResolver->resolveId($this->user);
     }
 }
