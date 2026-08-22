@@ -10,6 +10,7 @@ use Vima\Core\Role\Services\RoleService;
 use Vima\Core\Support\Utils\Utils;
 use Vima\Core\User\Services\UserResolutionService;
 use Vima\Core\User\Services\UserService;
+use Vima\Core\Vima;
 use function Vima\Core\resolve;
 
 class AccessContext
@@ -135,7 +136,7 @@ class AccessContext
      */
     public function isSuperAdmin(): bool
     {
-        return $this->manager->isSuperAdmin($this->user);
+        return Vima::user($this->user)->is()->superAdmin();
     }
 
     /**
