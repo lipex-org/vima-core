@@ -9,6 +9,8 @@ use Vima\Core\Policy\Services\PolicyRegistry;
 use Vima\Core\Policy\Contracts\PolicyInterface;
 use Vima\Core\Policy\DTOs\AccessContext;
 
+use Vima\Core\Policy\Attributes\MapToPermission;
+
 class DummyResource {}
 
 class DummyPolicy implements PolicyInterface
@@ -21,6 +23,31 @@ class DummyPolicy implements PolicyInterface
     public function canEdit(AccessContext $context, DummyResource $resource): bool
     {
         return $context->user->id === 1; // Only user 1 can edit
+    }
+
+    #[MapToPermission('publish')]
+    public function customPublishMethod(AccessContext $context, DummyResource $resource): bool
+    {
+        return $context->user->id === 10;
+    }
+
+    #[MapToPermission('dummy.delete')]
+    public function customDeleteMethod(AccessContext $context, DummyResource $resource): bool
+    {
+        return $context->user->id === 20;
+    }
+
+    #[MapToPermission('archive', 'tenant_1')]
+    public function customArchiveMethod(AccessContext $context, DummyResource $resource): bool
+    {
+        return $context->user->id === 30;
+    }
+
+    #[MapToPermission('export')]
+    #[MapToPermission('download')]
+    public function customExportMethod(AccessContext $context, DummyResource $resource): bool
+    {
+        return $context->user->id === 40;
     }
 }
 
@@ -57,6 +84,40 @@ class PolicyRegistryTest extends TestCase
 
         $this->assertTrue($this->registry->evaluate($user1, 'edit', $resource));
         $this->assertFalse($this->registry->evaluate($user2, 'edit', $resource));
+    }
+
+    public function testMapToPermissionAttributeMatching()
+    {
+        $this->registry->registerClass(DummyResource::class, DummyPolicy::class);
+        $resource = new DummyResource();
+
+        $user10 = (object)['id' => 10];
+        $user20 = (object)['id' => 20];
+        $user30 = (object)['id' => 30];
+        $user40 = (object)['id' => 40];
+        $otherUser = (object)['id' => 99];
+
+        // 1. #[MapToPermission('publish')] matched with action 'publish' and full 'dummy.publish'
+        $this->assertTrue($this->registry->evaluate($user10, 'publish', $resource));
+        $this->assertTrue($this->registry->evaluate($user10, 'dummy.publish', $resource));
+        $this->assertFalse($this->registry->evaluate($otherUser, 'dummy.publish', $resource));
+
+        // 2. #[MapToPermission('dummy.delete')] matched with 'dummy.delete' and action 'delete'
+        $this->assertTrue($this->registry->evaluate($user20, 'dummy.delete', $resource));
+        $this->assertTrue($this->registry->evaluate($user20, 'delete', $resource));
+        $this->assertFalse($this->registry->evaluate($otherUser, 'delete', $resource));
+
+        // 3. #[MapToPermission('archive', 'tenant_1')] matched with 'tenant_1:dummy.archive' and 'tenant_1:archive'
+        $this->assertTrue($this->registry->evaluate($user30, 'tenant_1:dummy.archive', $resource));
+        $this->assertTrue($this->registry->evaluate($user30, 'tenant_1:archive', $resource));
+        $this->assertFalse($this->registry->evaluate($otherUser, 'tenant_1:archive', $resource));
+
+        // 4. Multiple attributes: #[MapToPermission('export')] and #[MapToPermission('download')]
+        $this->assertTrue($this->registry->evaluate($user40, 'export', $resource));
+        $this->assertTrue($this->registry->evaluate($user40, 'download', $resource));
+        $this->assertTrue($this->registry->evaluate($user40, 'dummy.export', $resource));
+        $this->assertTrue($this->registry->evaluate($user40, 'dummy.download', $resource));
+        $this->assertFalse($this->registry->evaluate($otherUser, 'dummy.export', $resource));
     }
 
     public function testHasPolicy()

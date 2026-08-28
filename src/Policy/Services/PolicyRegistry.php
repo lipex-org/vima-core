@@ -243,11 +243,13 @@ class PolicyRegistry implements PolicyRegistryInterface
      */
     protected function resolveMethodViaAttributes(string $policyClass, string $permission, ?string $namespace = null): ?string
     {
-        if (!isset($this->methodMappingCache[$policyClass])) {
-            $cacheKey = 'vima:policies:' . str_replace('\\', '_', $policyClass) . ':methods';
-            $cached = $this->cache ? $this->cache->get($cacheKey) : null;
+        $cacheEnabled = $this->config->cacheEnabled && $this->cache !== null;
+        $cacheKey = 'vima:policies:' . str_replace('\\', '_', $policyClass) . ':methods';
 
-            if ($cached !== null) {
+        if (!isset($this->methodMappingCache[$policyClass])) {
+            $cached = $cacheEnabled ? $this->cache->get($cacheKey) : null;
+
+            if ($cached !== null && is_array($cached)) {
                 $this->methodMappingCache[$policyClass] = $cached;
             } else {
                 $this->methodMappingCache[$policyClass] = [];
@@ -258,27 +260,48 @@ class PolicyRegistry implements PolicyRegistryInterface
                     foreach ($attributes as $attribute) {
                         /** @var MapToPermission $map */
                         $map = $attribute->newInstance();
-                        $key = ($map->namespace ? $map->namespace . ':' : '') . $map->permission;
-                        $this->methodMappingCache[$policyClass][$key] = $method->getName();
+
+                        [$mapNs, $mapPerm] = Utils::resolveNamespace($map->permission);
+                        $ns = $map->namespace ?? $mapNs;
+                        $action = str_contains($mapPerm, '.') ? substr($mapPerm, strrpos($mapPerm, '.') + 1) : $mapPerm;
+
+                        if ($ns !== null) {
+                            $this->methodMappingCache[$policyClass][$ns . ':' . $mapPerm] = $method->getName();
+                            $this->methodMappingCache[$policyClass][$ns . ':' . $action] = $method->getName();
+                        } else {
+                            $this->methodMappingCache[$policyClass][$mapPerm] = $method->getName();
+                            $this->methodMappingCache[$policyClass][$action] = $method->getName();
+                        }
                     }
                 }
 
-                if ($this->cache) {
-                    $this->cache->set($cacheKey, $this->methodMappingCache[$policyClass], 3600);
+                if ($cacheEnabled) {
+                    $this->cache->set($cacheKey, $this->methodMappingCache[$policyClass], $this->config->cacheTTL);
                 }
             }
         }
 
-        // Check for namespaced match first
+        $action = str_contains($permission, '.') ? substr($permission, strrpos($permission, '.') + 1) : $permission;
+
+        // 1. Check for namespaced match first (exact permission or action)
         if ($namespace) {
             $namespacedKey = $namespace . ':' . $permission;
             if (isset($this->methodMappingCache[$policyClass][$namespacedKey])) {
                 return $this->methodMappingCache[$policyClass][$namespacedKey];
             }
+
+            $namespacedActionKey = $namespace . ':' . $action;
+            if (isset($this->methodMappingCache[$policyClass][$namespacedActionKey])) {
+                return $this->methodMappingCache[$policyClass][$namespacedActionKey];
+            }
         }
 
-        // Check for non-namespaced match
-        return $this->methodMappingCache[$policyClass][$permission] ?? null;
+        // 2. Check for non-namespaced match (exact permission or action)
+        if (isset($this->methodMappingCache[$policyClass][$permission])) {
+            return $this->methodMappingCache[$policyClass][$permission];
+        }
+
+        return $this->methodMappingCache[$policyClass][$action] ?? null;
     }
 
     /**
