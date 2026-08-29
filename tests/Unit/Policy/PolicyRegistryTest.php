@@ -127,4 +127,66 @@ class PolicyRegistryTest extends TestCase
         $this->assertTrue($this->registry->has('some.action'));
         $this->assertFalse($this->registry->has('missing.action'));
     }
+
+    public function testWarmCacheAndClearCache()
+    {
+        $this->registry->registerClass(DummyResource::class, DummyPolicy::class);
+
+        $stats = $this->registry->warmCache(force: true);
+
+        $this->assertArrayHasKey(DummyPolicy::class, $stats);
+        $this->assertGreaterThan(0, $stats[DummyPolicy::class]);
+
+        // Clear cache
+        $this->registry->clearCache();
+
+        // Should still be able to evaluate via reflection rebuild
+        $user10 = (object)['id' => 10];
+        $this->assertTrue($this->registry->evaluate($user10, 'publish', new DummyResource()));
+    }
+
+    public function testDiscoveredPoliciesLoadedFromConfig()
+    {
+        $config = new \Vima\Core\Config\VimaConfig(
+            policy: new \Vima\Core\Config\DTOs\PolicyConfig(
+                registered: [],
+                discovered: [DummyPolicy::class]
+            )
+        );
+
+        $registry = new PolicyRegistry(
+            $this->container->get(\Vima\Core\Events\Contracts\EventDispatcherInterface::class),
+            $this->container->get(\Vima\Core\Cache\Contracts\CacheInterface::class),
+            $config
+        );
+
+        $this->assertArrayHasKey(DummyResource::class, $registry->getRegisteredClasses());
+        $this->assertEquals(DummyPolicy::class, $registry->getRegisteredClasses()[DummyResource::class]);
+
+        $user10 = (object)['id' => 10];
+        $this->assertTrue($registry->evaluate($user10, 'dummy.publish', new DummyResource()));
+    }
+
+    public function testDiscoveredPoliciesLoadedFromCache()
+    {
+        $cache = $this->container->get(\Vima\Core\Cache\Contracts\CacheInterface::class);
+        $cache->set('vima:policies:discovered', [DummyPolicy::class], 3600);
+
+        $config = new \Vima\Core\Config\VimaConfig(
+            cacheEnabled: true,
+            policy: new \Vima\Core\Config\DTOs\PolicyConfig(
+                registered: [],
+                discovered: []
+            )
+        );
+
+        $registry = new PolicyRegistry(
+            $this->container->get(\Vima\Core\Events\Contracts\EventDispatcherInterface::class),
+            $cache,
+            $config
+        );
+
+        $this->assertArrayHasKey(DummyResource::class, $registry->getRegisteredClasses());
+        $this->assertEquals(DummyPolicy::class, $registry->getRegisteredClasses()[DummyResource::class]);
+    }
 }

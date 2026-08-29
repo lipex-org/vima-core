@@ -55,7 +55,7 @@ class PolicyRegistry implements PolicyRegistryInterface
         private CacheInterface $cache,
         private VimaConfig $config,
     ) {
-        $this->registerConfigPolicies();
+        $this->registerPolicies();
     }
 
     private static $instance = null;
@@ -241,6 +241,102 @@ class PolicyRegistry implements PolicyRegistryInterface
      * @param string|null $namespace
      * @return string|null
      */
+    /**
+     * Extracts attribute mappings for a given policy class via Reflection.
+     *
+     * @param string $policyClass
+     * @return array<string, string>
+     */
+    public function extractMethodMappings(string $policyClass): array
+    {
+        $mappings = [];
+        $reflection = new ReflectionClass($policyClass);
+
+        foreach ($reflection->getMethods() as $method) {
+            $attributes = $method->getAttributes(MapToPermission::class);
+            foreach ($attributes as $attribute) {
+                /** @var MapToPermission $map */
+                $map = $attribute->newInstance();
+
+                [$mapNs, $mapPerm] = Utils::resolveNamespace($map->permission);
+                $ns = $map->namespace ?? $mapNs;
+                $action = str_contains($mapPerm, '.') ? substr($mapPerm, strrpos($mapPerm, '.') + 1) : $mapPerm;
+
+                if ($ns !== null) {
+                    $mappings[$ns . ':' . $mapPerm] = $method->getName();
+                    $mappings[$ns . ':' . $action] = $method->getName();
+                } else {
+                    $mappings[$mapPerm] = $method->getName();
+                    $mappings[$action] = $method->getName();
+                }
+            }
+        }
+
+        return $mappings;
+    }
+
+    /**
+     * Pre-warm and cache attribute method mappings for all registered policy classes.
+     *
+     * @param bool $force Force caching even if cache is globally disabled in config.
+     * @return array<string, int> Array mapping policy class name to number of mapped abilities/methods.
+     */
+    public function warmCache(bool $force = false): array
+    {
+        $stats = [];
+        $cacheActive = ($this->config->cacheEnabled || $force) && $this->cache !== null;
+
+        if ($cacheActive) {
+            $discoveredClasses = array_values(array_unique(array_values($this->policiesClasses)));
+            $this->cache->set('vima:policies:discovered', $discoveredClasses, $this->config->cacheTTL);
+        }
+
+        foreach ($this->policiesClasses as $resourceClass => $policyClass) {
+            if (!class_exists($policyClass)) {
+                continue;
+            }
+
+            $mappings = $this->extractMethodMappings($policyClass);
+            $this->methodMappingCache[$policyClass] = $mappings;
+
+            if ($cacheActive) {
+                $cacheKey = 'vima:policies:' . str_replace('\\', '_', $policyClass) . ':methods';
+                $this->cache->set($cacheKey, $mappings, $this->config->cacheTTL);
+            }
+
+            $stats[$policyClass] = count($mappings);
+        }
+
+        return $stats;
+    }
+
+    /**
+     * Clear all cached policy mappings.
+     *
+     * @return void
+     */
+    public function clearCache(): void
+    {
+        $this->methodMappingCache = [];
+
+        if ($this->cache !== null) {
+            $this->cache->delete('vima:policies:discovered');
+
+            foreach ($this->policiesClasses as $resourceClass => $policyClass) {
+                $cacheKey = 'vima:policies:' . str_replace('\\', '_', $policyClass) . ':methods';
+                $this->cache->delete($cacheKey);
+            }
+        }
+    }
+
+    /**
+     * Resolves a method name using the MapToPermission attribute.
+     *
+     * @param string $policyClass
+     * @param string $permission
+     * @param string|null $namespace
+     * @return string|null
+     */
     protected function resolveMethodViaAttributes(string $policyClass, string $permission, ?string $namespace = null): ?string
     {
         $cacheEnabled = $this->config->cacheEnabled && $this->cache !== null;
@@ -252,31 +348,11 @@ class PolicyRegistry implements PolicyRegistryInterface
             if ($cached !== null && is_array($cached)) {
                 $this->methodMappingCache[$policyClass] = $cached;
             } else {
-                $this->methodMappingCache[$policyClass] = [];
-                $reflection = new ReflectionClass($policyClass);
-
-                foreach ($reflection->getMethods() as $method) {
-                    $attributes = $method->getAttributes(MapToPermission::class);
-                    foreach ($attributes as $attribute) {
-                        /** @var MapToPermission $map */
-                        $map = $attribute->newInstance();
-
-                        [$mapNs, $mapPerm] = Utils::resolveNamespace($map->permission);
-                        $ns = $map->namespace ?? $mapNs;
-                        $action = str_contains($mapPerm, '.') ? substr($mapPerm, strrpos($mapPerm, '.') + 1) : $mapPerm;
-
-                        if ($ns !== null) {
-                            $this->methodMappingCache[$policyClass][$ns . ':' . $mapPerm] = $method->getName();
-                            $this->methodMappingCache[$policyClass][$ns . ':' . $action] = $method->getName();
-                        } else {
-                            $this->methodMappingCache[$policyClass][$mapPerm] = $method->getName();
-                            $this->methodMappingCache[$policyClass][$action] = $method->getName();
-                        }
-                    }
-                }
+                $mappings = $this->extractMethodMappings($policyClass);
+                $this->methodMappingCache[$policyClass] = $mappings;
 
                 if ($cacheEnabled) {
-                    $this->cache->set($cacheKey, $this->methodMappingCache[$policyClass], $this->config->cacheTTL);
+                    $this->cache->set($cacheKey, $mappings, $this->config->cacheTTL);
                 }
             }
         }
@@ -352,20 +428,55 @@ class PolicyRegistry implements PolicyRegistryInterface
         return $this->policies[$ability] ?? null;
     }
 
-    private function registerConfigPolicies(): void
+    private function registerPolicies(): void
     {
-        foreach ($this->config->policy->registered as $policyClass) {
-            if (!class_exists($policyClass)) {
-                throw new InvalidPolicyClassException("Class $policyClass does not exist");
-            }
-
-            $class = new $policyClass();
-            if (!($class instanceof PolicyInterface)) {
-                throw new InvalidPolicyClassException("Class $policyClass does not implement [ " . PolicyInterface::class . " ]");
-            }
-
-            $resource = $policyClass::getResource();
-            $this->registerClass($resource, $policyClass);
+        if ($this->config->policy === null) {
+            return;
         }
+
+        // 1. Register explicitly configured policies
+        foreach ($this->config->policy->registered as $policyClass) {
+            $this->loadPolicyClass($policyClass);
+        }
+
+        // 2. Register discovered policies (check cache first if active, then fallback to config DTO)
+        $discovered = [];
+        $cacheActive = $this->config->cacheEnabled && $this->cache !== null;
+
+        if ($cacheActive) {
+            $cachedDiscovered = $this->cache->get('vima:policies:discovered');
+            if (is_array($cachedDiscovered)) {
+                $discovered = $cachedDiscovered;
+            }
+        }
+
+        if (empty($discovered) && !empty($this->config->policy->discovered)) {
+            $discovered = $this->config->policy->discovered;
+
+            if ($cacheActive) {
+                $this->cache->set('vima:policies:discovered', $discovered, $this->config->cacheTTL);
+            }
+        }
+
+        foreach ($discovered as $policyClass) {
+            // Avoid re-registering if already registered
+            if (!in_array($policyClass, $this->policiesClasses, true)) {
+                $this->loadPolicyClass($policyClass);
+            }
+        }
+    }
+
+    private function loadPolicyClass(string $policyClass): void
+    {
+        if (!class_exists($policyClass)) {
+            throw new InvalidPolicyClassException("Class {$policyClass} does not exist");
+        }
+
+        if (!is_subclass_of($policyClass, PolicyInterface::class)) {
+            throw new InvalidPolicyClassException("Class {$policyClass} does not implement [ " . PolicyInterface::class . " ]");
+        }
+
+        $resource = $policyClass::getResource();
+        $this->registerClass($resource, $policyClass);
     }
 }

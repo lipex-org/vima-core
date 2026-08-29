@@ -61,4 +61,26 @@ interface PolicyRegistryInterface
      * @return bool
      */
     public function has(string $action, ?string $resource = null): bool;
+
+    /**
+     * Pre-warm and cache attribute method mappings for all registered policy classes.
+     *
+     * @param bool $force Force caching even if cache is globally disabled in config.
+     * @return array<string, int> Array mapping policy class name to number of mapped abilities/methods.
+     */
+    public function warmCache(bool $force = false): array;
+
+    /**
+     * Clear all cached policy mappings.
+     *
+     * @return void
+     */
+    public function clearCache(): void;
+
+    /**
+     * Retrieve all registered policy classes mapped by resource class.
+     *
+     * @return array<string, string>
+     */
+    public function getRegisteredClasses(): array;
 }

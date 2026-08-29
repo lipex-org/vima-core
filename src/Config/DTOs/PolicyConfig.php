@@ -16,6 +16,8 @@ class PolicyConfig
 {
     public function __construct(
         public readonly array $registered = [],
+        public readonly array $discovered = [],
+        public readonly bool $autoDiscover = true,
     ) {
     }
 }

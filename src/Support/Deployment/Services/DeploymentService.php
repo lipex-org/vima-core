@@ -52,13 +52,8 @@ class DeploymentService
         }
 
         // 2. Warm Policy Attribute Maps
-        $policies = $this->policyRegistry->getRegisteredClasses();
-        $reflectionMethod = new \ReflectionMethod($this->policyRegistry, 'resolveMethodViaAttributes');
-
-        foreach ($policies as $resource => $policyClass) {
-            $reflectionMethod->invoke($this->policyRegistry, $policyClass, '__warmup__', null);
-            $stats['policies']++;
-        }
+        $policyStats = $this->policyRegistry->warmCache(force: true);
+        $stats['policies'] = count($policyStats);
 
         return $stats;
     }
