@@ -170,7 +170,7 @@ class PolicyRegistryTest extends TestCase
     public function testDiscoveredPoliciesLoadedFromCache()
     {
         $cache = $this->container->get(\Vima\Core\Cache\Contracts\CacheInterface::class);
-        $cache->set('vima:policies:discovered', [DummyPolicy::class], 3600);
+        $cache->set('vima_policies_discovered', [DummyPolicy::class], 3600);
 
         $config = new \Vima\Core\Config\VimaConfig(
             cacheEnabled: true,

@@ -288,7 +288,7 @@ class PolicyRegistry implements PolicyRegistryInterface
 
         if ($cacheActive) {
             $discoveredClasses = array_values(array_unique(array_values($this->policiesClasses)));
-            $this->cache->set('vima:policies:discovered', $discoveredClasses, $this->config->cacheTTL);
+            $this->cache->set($this->getDiscoveredCacheKey(), $discoveredClasses, $this->config->cacheTTL);
         }
 
         foreach ($this->policiesClasses as $resourceClass => $policyClass) {
@@ -300,7 +300,7 @@ class PolicyRegistry implements PolicyRegistryInterface
             $this->methodMappingCache[$policyClass] = $mappings;
 
             if ($cacheActive) {
-                $cacheKey = 'vima:policies:' . str_replace('\\', '_', $policyClass) . ':methods';
+                $cacheKey = $this->getPolicyMethodsCacheKey($policyClass);
                 $this->cache->set($cacheKey, $mappings, $this->config->cacheTTL);
             }
 
@@ -320,10 +320,10 @@ class PolicyRegistry implements PolicyRegistryInterface
         $this->methodMappingCache = [];
 
         if ($this->cache !== null) {
-            $this->cache->delete('vima:policies:discovered');
+            $this->cache->delete($this->getDiscoveredCacheKey());
 
             foreach ($this->policiesClasses as $resourceClass => $policyClass) {
-                $cacheKey = 'vima:policies:' . str_replace('\\', '_', $policyClass) . ':methods';
+                $cacheKey = $this->getPolicyMethodsCacheKey($policyClass);
                 $this->cache->delete($cacheKey);
             }
         }
@@ -340,7 +340,7 @@ class PolicyRegistry implements PolicyRegistryInterface
     protected function resolveMethodViaAttributes(string $policyClass, string $permission, ?string $namespace = null): ?string
     {
         $cacheEnabled = $this->config->cacheEnabled && $this->cache !== null;
-        $cacheKey = 'vima:policies:' . str_replace('\\', '_', $policyClass) . ':methods';
+        $cacheKey = $this->getPolicyMethodsCacheKey($policyClass);
 
         if (!isset($this->methodMappingCache[$policyClass])) {
             $cached = $cacheEnabled ? $this->cache->get($cacheKey) : null;
@@ -444,7 +444,7 @@ class PolicyRegistry implements PolicyRegistryInterface
         $cacheActive = $this->config->cacheEnabled && $this->cache !== null;
 
         if ($cacheActive) {
-            $cachedDiscovered = $this->cache->get('vima:policies:discovered');
+            $cachedDiscovered = $this->cache->get($this->getDiscoveredCacheKey());
             if (is_array($cachedDiscovered)) {
                 $discovered = $cachedDiscovered;
             }
@@ -454,7 +454,7 @@ class PolicyRegistry implements PolicyRegistryInterface
             $discovered = $this->config->policy->discovered;
 
             if ($cacheActive) {
-                $this->cache->set('vima:policies:discovered', $discovered, $this->config->cacheTTL);
+                $this->cache->set($this->getDiscoveredCacheKey(), $discovered, $this->config->cacheTTL);
             }
         }
 
@@ -464,6 +464,19 @@ class PolicyRegistry implements PolicyRegistryInterface
                 $this->loadPolicyClass($policyClass);
             }
         }
+    }
+
+    private function getDiscoveredCacheKey(): string
+    {
+        $prefix = rtrim($this->config->cachePrefix, '_:') ?: 'vima';
+        return $prefix . '_policies_discovered';
+    }
+
+    private function getPolicyMethodsCacheKey(string $policyClass): string
+    {
+        $prefix = rtrim($this->config->cachePrefix, '_:') ?: 'vima';
+        $sanitized = str_replace(['\\', ':', '/'], '_', $policyClass);
+        return $prefix . '_policies_' . $sanitized . '_methods';
     }
 
     private function loadPolicyClass(string $policyClass): void

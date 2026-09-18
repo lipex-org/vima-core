@@ -56,8 +56,8 @@ class UserGet
     public function roles(bool $resolve = false): array
     {
         $cacheActive = $this->config->cacheEnabled && $this->cache !== null;
-        $prefix = rtrim($this->config->cachePrefix, '_:');
-        $cacheKey = $prefix . ':user:' . $this->userId . ':roles';
+        $prefix = rtrim($this->config->cachePrefix, '_:') ?: 'vima';
+        $cacheKey = $prefix . '_user_' . $this->userId . '_roles';
 
         if ($cacheActive) {
             $cached = $this->cache->get($cacheKey);
@@ -88,8 +88,8 @@ class UserGet
     public function compiled(array $context = []): array
     {
         $cacheActive = $this->config->cacheEnabled && $this->cache !== null;
-        $prefix = rtrim($this->config->cachePrefix, '_:');
-        $cacheKey = $prefix . ':user:' . $this->userId . ':permissions';
+        $prefix = rtrim($this->config->cachePrefix, '_:') ?: 'vima';
+        $cacheKey = $prefix . '_user_' . $this->userId . '_permissions';
 
         if ($cacheActive) {
             $cached = $this->cache->get($cacheKey);
