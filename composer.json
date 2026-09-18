@@ -11,7 +11,7 @@
   ],
   "require": {
     "php": ">=8.5",
-    "symfony/console": "^7.3",
+    "symfony/console": "^8.1",
     "symfony/var-dumper": "^7.3",
     "symfony/cache": "^8.0"
   },
