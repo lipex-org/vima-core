@@ -16,14 +16,21 @@ use Vima\Core\Role\Entities\Role;
 use Vima\Core\Role\Entities\RoleParent;
 use Vima\Core\Role\Contracts\RoleParentRepositoryInterface;
 use Vima\Core\Events\Contracts\EventDispatcherInterface;
+use Vima\Core\Cache\Services\CacheVersionManager;
+use Vima\Core\Events\DomainEvent;
+use function Vima\Core\resolve;
 
 class RoleParentsBuilder
 {
+    private ?CacheVersionManager $versionManager = null;
+
     public function __construct(
         private Role $role,
         private RoleParentRepositoryInterface $roleParents,
-        private EventDispatcherInterface $dispatcher
+        private EventDispatcherInterface $dispatcher,
+        ?CacheVersionManager $versionManager = null
     ) {
+        $this->versionManager = $versionManager ?? (function_exists('Vima\Core\resolve') ? resolve(CacheVersionManager::class) : null);
     }
 
     public function add(string|int $parentId): self
@@ -32,6 +39,17 @@ class RoleParentsBuilder
             roleId: $this->role->id,
             parentId: $parentId
         ));
+
+        if ($this->role->id !== null && $this->versionManager !== null) {
+            $this->versionManager->bumpRoleEpoch($this->role->id);
+        }
+
+        $this->dispatcher->dispatch(new DomainEvent('vima.role.parent_added', [
+            'role' => $this->role,
+            'roleId' => $this->role->id,
+            'parentId' => $parentId
+        ]));
+
         return $this;
     }
 
@@ -41,12 +59,33 @@ class RoleParentsBuilder
             roleId: $this->role->id,
             parentId: $parentId
         ));
+
+        if ($this->role->id !== null && $this->versionManager !== null) {
+            $this->versionManager->bumpRoleEpoch($this->role->id);
+        }
+
+        $this->dispatcher->dispatch(new DomainEvent('vima.role.parent_removed', [
+            'role' => $this->role,
+            'roleId' => $this->role->id,
+            'parentId' => $parentId
+        ]));
+
         return $this;
     }
 
     public function clear(): self
     {
         $this->roleParents->clearParents($this->role);
+
+        if ($this->role->id !== null && $this->versionManager !== null) {
+            $this->versionManager->bumpRoleEpoch($this->role->id);
+        }
+
+        $this->dispatcher->dispatch(new DomainEvent('vima.role.parents_cleared', [
+            'role' => $this->role,
+            'roleId' => $this->role->id
+        ]));
+
         return $this;
     }
 

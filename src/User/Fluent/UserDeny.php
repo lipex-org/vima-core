@@ -20,8 +20,9 @@ use Vima\Core\Role\Entities\Role;
 use Vima\Core\Permission\Entities\Permission;
 use Vima\Core\Events\Contracts\EventDispatcherInterface;
 use DateTimeInterface;
-
 use Vima\Core\Events\DomainEvent;
+use Vima\Core\Cache\Services\CacheVersionManager;
+use function Vima\Core\resolve;
 
 /**
  * Class UserDeny
@@ -30,14 +31,18 @@ use Vima\Core\Events\DomainEvent;
  */
 class UserDeny
 {
+    private ?CacheVersionManager $versionManager = null;
+
     public function __construct(
         private int|string $userId,
         private RoleService $roleService,
         private PermissionService $permissionService,
         private UserDenyRepositoryInterface $userDenies,
         private UserRoleDenyRepositoryInterface $userRoleDenies,
-        private EventDispatcherInterface $dispatcher
+        private EventDispatcherInterface $dispatcher,
+        ?CacheVersionManager $versionManager = null
     ) {
+        $this->versionManager = $versionManager ?? (function_exists('Vima\Core\resolve') ? resolve(CacheVersionManager::class) : null);
     }
 
     public function role(string|Role|array $role, ?string $reason = null, ?DateTimeInterface $expiresAt = null): void
@@ -72,6 +77,12 @@ class UserDeny
             $reason,
             $expiresAt
         );
+
+        if ($this->versionManager !== null) {
+            $this->versionManager->bumpUserEpoch($this->userId);
+        } else {
+            CacheVersionManager::clearL1User($this->userId);
+        }
 
         $this->dispatcher->dispatch(new DomainEvent('vima.user.role_denied', [
             'userId' => $this->userId,
@@ -113,6 +124,12 @@ class UserDeny
             $reason,
             $expiresAt
         );
+
+        if ($this->versionManager !== null) {
+            $this->versionManager->bumpUserEpoch($this->userId);
+        } else {
+            CacheVersionManager::clearL1User($this->userId);
+        }
 
         $this->dispatcher->dispatch(new DomainEvent('vima.user.permission_denied', [
             'userId' => $this->userId,

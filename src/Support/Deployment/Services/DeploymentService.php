@@ -13,8 +13,10 @@ declare(strict_types=1);
 namespace Vima\Core\Support\Deployment\Services;
 
 use Vima\Core\Cache\Contracts\CacheInterface;
+use Vima\Core\Cache\Services\CacheVersionManager;
 use Vima\Core\Role\Services\RoleService;
 use Vima\Core\Policy\Services\PolicyRegistry;
+use function Vima\Core\resolve;
 
 /**
  * Class DeploymentService
@@ -23,11 +25,15 @@ use Vima\Core\Policy\Services\PolicyRegistry;
  */
 class DeploymentService
 {
+    private ?CacheVersionManager $versionManager = null;
+
     public function __construct(
         private RoleService $roleService,
         private PolicyRegistry $policyRegistry,
-        private CacheInterface $cache
+        private CacheInterface $cache,
+        ?CacheVersionManager $versionManager = null
     ) {
+        $this->versionManager = $versionManager ?? (function_exists('Vima\Core\resolve') ? resolve(CacheVersionManager::class) : null);
     }
 
     /**
@@ -59,10 +65,17 @@ class DeploymentService
     }
 
     /**
-     * Wipe all Vima caches.
+     * Wipe all Vima caches safely without flushing non-Vima application cache.
      */
     public function clear(): void
     {
+        CacheVersionManager::clearL1();
+
+        if ($this->versionManager !== null) {
+            $this->versionManager->bumpGlobalEpoch();
+            return;
+        }
+
         $this->cache->clear();
     }
 }

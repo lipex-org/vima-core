@@ -23,16 +23,22 @@ use Vima\Core\Events\Contracts\EventDispatcherInterface;
 use Vima\Core\Role\Services\RoleService;
 use function Vima\Core\resolve;
 
+use Vima\Core\Cache\Services\CacheVersionManager;
+use Vima\Core\Events\DomainEvent;
+
 class RolePermissionsBuilder
 {
-
     private PermissionService $permissionService;
+    private ?CacheVersionManager $versionManager = null;
+
     public function __construct(
         private Role $role,
         private RolePermissionRepositoryInterface $rolePermissions,
-        private EventDispatcherInterface $dispatcher
+        private EventDispatcherInterface $dispatcher,
+        ?CacheVersionManager $versionManager = null
     ) {
         $this->permissionService = resolve(PermissionService::class);
+        $this->versionManager = $versionManager ?? (function_exists('Vima\Core\resolve') ? resolve(CacheVersionManager::class) : null);
     }
 
     public function add(string|Permission|array $permission, array $constraints = []): self
@@ -59,6 +65,18 @@ class RolePermissionsBuilder
             permissionId: $p->id,
             constraints: $constraints
         ));
+
+        if ($this->role->id !== null && $this->versionManager !== null) {
+            $this->versionManager->bumpRoleEpoch($this->role->id);
+        }
+
+        $this->dispatcher->dispatch(new DomainEvent('vima.role.permission_added', [
+            'role' => $this->role,
+            'permission' => $p,
+            'roleId' => $this->role->id,
+            'permissionId' => $p->id
+        ]));
+
         return $this;
     }
 
@@ -81,6 +99,18 @@ class RolePermissionsBuilder
             roleId: $this->role->id,
             permissionId: $p->id
         ));
+
+        if ($this->role->id !== null && $this->versionManager !== null) {
+            $this->versionManager->bumpRoleEpoch($this->role->id);
+        }
+
+        $this->dispatcher->dispatch(new DomainEvent('vima.role.permission_removed', [
+            'role' => $this->role,
+            'permission' => $p,
+            'roleId' => $this->role->id,
+            'permissionId' => $p->id
+        ]));
+
         return $this;
     }
 
@@ -90,7 +120,42 @@ class RolePermissionsBuilder
      */
     public function all(): array
     {
-        return $this->resolvePerms($this->role);
+        $roleId = $this->role->id;
+        $l1Key = $roleId !== null ? "role_{$roleId}_perms" : null;
+
+        if ($l1Key !== null && CacheVersionManager::hasL1($l1Key)) {
+            return CacheVersionManager::getL1($l1Key);
+        }
+
+        if ($roleId !== null && $this->versionManager !== null && $this->versionManager->isCacheEnabled()) {
+            $cacheKey = $this->versionManager->buildRoleKey($roleId);
+            $cache = $this->versionManager->getCache();
+            if ($cache !== null) {
+                $cached = $cache->get($cacheKey);
+                if (is_array($cached)) {
+                    if ($l1Key !== null) {
+                        CacheVersionManager::setL1($l1Key, $cached);
+                    }
+                    return $cached;
+                }
+            }
+        }
+
+        $resolved = $this->resolvePerms($this->role);
+
+        if ($roleId !== null && $this->versionManager !== null && $this->versionManager->isCacheEnabled()) {
+            $cacheKey = $this->versionManager->buildRoleKey($roleId);
+            $cache = $this->versionManager->getCache();
+            if ($cache !== null) {
+                $cache->set($cacheKey, $resolved, $this->versionManager->getTTL());
+            }
+        }
+
+        if ($l1Key !== null) {
+            CacheVersionManager::setL1($l1Key, $resolved);
+        }
+
+        return $resolved;
     }
 
     /**

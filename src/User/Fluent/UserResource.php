@@ -144,6 +144,24 @@ class UserResource
         );
     }
 
+    public function permissions(): UserGetPermissions
+    {
+        return $this->get()->permissions();
+    }
+
+    /**
+     * Return a flat dictionary of permission names to boolean values for the user.
+     * Perfect for Inertia / frontend state.
+     *
+     * @param string[] $filter Optional list of permission names to evaluate.
+     * @param array $context Contextual parameters for evaluation.
+     * @return array<string, bool>
+     */
+    public function matrix(array $filter = [], array $context = []): array
+    {
+        return $this->get()->matrix($filter, $context);
+    }
+
     public function getId(): int|string
     {
         return $this->userId;

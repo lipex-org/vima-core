@@ -22,6 +22,8 @@ use Vima\Core\User\Entities\UserPermission;
 use Vima\Core\Role\Entities\Role;
 use Vima\Core\Permission\Entities\Permission;
 use Vima\Core\Events\Contracts\EventDispatcherInterface;
+use Vima\Core\Cache\Services\CacheVersionManager;
+use function Vima\Core\resolve;
 
 /**
  * Class UserGrant
@@ -30,14 +32,18 @@ use Vima\Core\Events\Contracts\EventDispatcherInterface;
  */
 class UserGrant
 {
+    private ?CacheVersionManager $versionManager = null;
+
     public function __construct(
         private int|string $userId,
         private RoleService $roleService,
         private PermissionService $permissionService,
         private UserRoleRepositoryInterface $userRoles,
         private UserPermissionRepositoryInterface $userPermissions,
-        private EventDispatcherInterface $dispatcher
+        private EventDispatcherInterface $dispatcher,
+        ?CacheVersionManager $versionManager = null
     ) {
+        $this->versionManager = $versionManager ?? (function_exists('Vima\Core\resolve') ? resolve(CacheVersionManager::class) : null);
     }
 
     public function role(string|Role|array $role, array $context = []): void
@@ -84,6 +90,12 @@ class UserGrant
             context: $context
         ));
 
+        if ($this->versionManager !== null) {
+            $this->versionManager->bumpUserEpoch($this->userId);
+        } else {
+            CacheVersionManager::clearL1User($this->userId);
+        }
+
         $this->dispatcher->dispatch(new DomainEvent('vima.user.role_granted', [
             'userId' => $this->userId,
             'role' => $roleEntity,
@@ -114,6 +126,12 @@ class UserGrant
             permissionId: $permissionEntity->id,
             constraints: $constraints
         ));
+
+        if ($this->versionManager !== null) {
+            $this->versionManager->bumpUserEpoch($this->userId);
+        } else {
+            CacheVersionManager::clearL1User($this->userId);
+        }
 
         $this->dispatcher->dispatch(new DomainEvent('vima.user.permission_granted', [
             'userId' => $this->userId,

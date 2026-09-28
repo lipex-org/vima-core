@@ -36,9 +36,10 @@ class UserHas
 
         // Super Admin bypass: if enabled and the user is a super admin, they have all roles.
         $superAdminRole = $this->config->superAdminRole;
+        $superAdminRoleName = $superAdminRole instanceof Role ? $superAdminRole->name : (is_string($superAdminRole) ? $superAdminRole : null);
         $roleNameString = is_string($role) ? $role : $role->name;
-        if ($superAdminRole && $this->config->superAdminBypass && $roleNameString !== $superAdminRole) {
-            if ($this->role($superAdminRole)) {
+        if ($superAdminRoleName && $this->config->superAdminBypass && $roleNameString !== $superAdminRoleName) {
+            if ($this->role($superAdminRoleName)) {
                 return true;
             }
         }

@@ -21,18 +21,25 @@ use Vima\Core\Permission\Entities\Permission;
 use Vima\Core\Events\Contracts\EventDispatcherInterface;
 use Vima\Core\Support\Utils\Utils;
 
+use DateTimeInterface;
 use Vima\Core\Events\DomainEvent;
+use Vima\Core\Cache\Services\CacheVersionManager;
+use function Vima\Core\resolve;
 
 class UserUndeny
 {
+    private ?CacheVersionManager $versionManager = null;
+
     public function __construct(
         private int|string $userId,
         private RoleService $roleService,
         private PermissionService $permissionService,
         private UserDenyRepositoryInterface $userDenies,
         private UserRoleDenyRepositoryInterface $userRoleDenies,
-        private EventDispatcherInterface $dispatcher
+        private EventDispatcherInterface $dispatcher,
+        ?CacheVersionManager $versionManager = null
     ) {
+        $this->versionManager = $versionManager ?? (function_exists('Vima\Core\resolve') ? resolve(CacheVersionManager::class) : null);
     }
 
     public function role(string|Role|array $role): void
@@ -50,6 +57,12 @@ class UserUndeny
         }
 
         $this->userRoleDenies->remove($this->userId, $roleEntity->id);
+
+        if ($this->versionManager !== null) {
+            $this->versionManager->bumpUserEpoch($this->userId);
+        } else {
+            CacheVersionManager::clearL1User($this->userId);
+        }
 
         $this->dispatcher->dispatch(new DomainEvent('vima.user.role_undenied', [
             'userId' => $this->userId,
@@ -72,6 +85,12 @@ class UserUndeny
                 $pid = ($namespace ? $namespace . ':' : '') . '*';
                 $this->userDenies->remove($this->userId, $pid);
 
+                if ($this->versionManager !== null) {
+                    $this->versionManager->bumpUserEpoch($this->userId);
+                } else {
+                    CacheVersionManager::clearL1User($this->userId);
+                }
+
                 $this->dispatcher->dispatch(new DomainEvent('vima.user.permission_undenied', [
                     'userId' => $this->userId,
                     'permission' => $pid
@@ -83,6 +102,12 @@ class UserUndeny
         $permissionEntity = $this->permissionService->find($permission);
         if ($permissionEntity) {
             $this->userDenies->remove($this->userId, $permissionEntity->id);
+
+            if ($this->versionManager !== null) {
+                $this->versionManager->bumpUserEpoch($this->userId);
+            } else {
+                CacheVersionManager::clearL1User($this->userId);
+            }
 
             $this->dispatcher->dispatch(new DomainEvent('vima.user.permission_undenied', [
                 'userId' => $this->userId,

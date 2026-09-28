@@ -19,6 +19,8 @@ use Vima\Core\Config\Services\SyncService;
 use Vima\Core\Config\VimaConfig;
 use Vima\Core\Cache\Contracts\CacheInterface;
 use Vima\Core\Cache\Adapters\SymfonyCacheAdapter;
+use Vima\Core\Cache\Services\CacheVersionManager;
+use Vima\Core\Support\Deployment\Services\DeploymentService;
 use Vima\Core\Events\Contracts\EventDispatcherInterface;
 use Vima\Core\Events\Dispatchers\DefaultEventDispatcher;
 
@@ -58,6 +60,11 @@ class CoreBootstrapper
         if (!$container->get(VimaConfig::class)) {
             $container->register(VimaConfig::class, fn() => new VimaConfig());
         }
+
+        $container->register(CacheVersionManager::class, fn($c) => new CacheVersionManager(
+            $c->get(CacheInterface::class),
+            $c->get(VimaConfig::class)
+        ));
 
         // We assume repos are bound externally by the consumer (e.g. CI4 or Laravel bridge).
         // For testing, we could bind arrays or mock repositories here.
@@ -104,6 +111,13 @@ class CoreBootstrapper
             $c->get(PolicyRegistry::class),
             $c->get(VimaConfig::class),
             $c->get(EventDispatcherInterface::class)
+        ));
+
+        $container->register(DeploymentService::class, fn($c) => new DeploymentService(
+            $c->get(RoleService::class),
+            $c->get(PolicyRegistry::class),
+            $c->get(CacheInterface::class),
+            $c->get(CacheVersionManager::class)
         ));
 
         $container->register(AuditService::class, fn($c) => new AuditService(

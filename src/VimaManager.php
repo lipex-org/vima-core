@@ -103,10 +103,15 @@ class VimaManager
     }
 
     /**
-     * Enforce permission check, throwing an exception on failure.
+     * Return a flat dictionary of permission names to boolean values for the user.
+     *
+     * @param object $user
+     * @param string[] $filter
+     * @param array $context
+     * @return array<string, bool>
      */
-    public function enforce(object $user, string $permission, ...$arguments): void
+    public function matrix(object $user, array $filter = [], array $context = []): array
     {
-        $this->auth()->enforce($user, $permission, ...$arguments);
+        return $this->user($user)->matrix($filter, $context);
     }
 }

@@ -22,17 +22,23 @@ use Vima\Core\Permission\Entities\Permission;
 use Vima\Core\Events\Contracts\EventDispatcherInterface;
 use Vima\Core\User\Entities\UserPermission;
 use Vima\Core\User\Entities\UserRole;
+use Vima\Core\Cache\Services\CacheVersionManager;
+use function Vima\Core\resolve;
 
 class UserRevoke
 {
+    private ?CacheVersionManager $versionManager = null;
+
     public function __construct(
         private int|string $userId,
         private RoleService $roleService,
         private PermissionService $permissionService,
         private UserRoleRepositoryInterface $userRoles,
         private UserPermissionRepositoryInterface $userPermissions,
-        private EventDispatcherInterface $dispatcher
+        private EventDispatcherInterface $dispatcher,
+        ?CacheVersionManager $versionManager = null
     ) {
+        $this->versionManager = $versionManager ?? (function_exists('Vima\Core\resolve') ? resolve(CacheVersionManager::class) : null);
     }
 
     public function role(string|Role|array $role): void
@@ -53,6 +59,13 @@ class UserRevoke
             userId: $this->userId,
             roleId: $roleEntity->id
         ));
+
+        if ($this->versionManager !== null) {
+            $this->versionManager->bumpUserEpoch($this->userId);
+        } else {
+            CacheVersionManager::clearL1User($this->userId);
+        }
+
         $this->dispatcher->dispatch(new DomainEvent('vima.user.role_revoked', [
             'userId' => $this->userId,
             'role' => $roleEntity
@@ -77,6 +90,13 @@ class UserRevoke
             userId: $this->userId,
             permissionId: $permissionEntity->id
         ));
+
+        if ($this->versionManager !== null) {
+            $this->versionManager->bumpUserEpoch($this->userId);
+        } else {
+            CacheVersionManager::clearL1User($this->userId);
+        }
+
         $this->dispatcher->dispatch(new DomainEvent('vima.user.permission_revoked', [
             'userId' => $this->userId,
             'permission' => $permissionEntity

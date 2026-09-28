@@ -57,4 +57,17 @@ class UserGetPermissions
         }
         return array_filter($perms);
     }
+
+    /**
+     * Return a flat dictionary of permission names to boolean values for the user.
+     * Perfect for Inertia / frontend state.
+     *
+     * @param string[] $filter Optional list of permission names to evaluate. If empty, evaluates all system permissions.
+     * @param array $context Contextual parameters for evaluation.
+     * @return array<string, bool>
+     */
+    public function matrix(array $filter = [], array $context = []): array
+    {
+        return $this->userGet->matrix($filter, $context);
+    }
 }

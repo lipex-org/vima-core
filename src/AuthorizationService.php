@@ -20,6 +20,7 @@ use Vima\Core\Config\VimaConfig;
 use Vima\Core\Support\Utils\Utils;
 use Vima\Core\Policy\Services\PolicyRegistry;
 use Vima\Core\Events\Contracts\EventDispatcherInterface;
+use Vima\Core\Cache\Services\CacheVersionManager;
 // Note: Additional classes like AccessDeniedException would need to be migrated/created.
 
 /**
@@ -41,12 +42,21 @@ class AuthorizationService
     public function isPermitted(object $user, string $permission, array $context = []): bool
     {
         $userRes = $this->userService->user($user);
+        $userId = $userRes->getId();
+        $ctxHash = !empty($context) ? substr(md5(json_encode($context)), 0, 8) : 'all';
+        $l1Key = "auth_{$userId}_{$permission}_{$ctxHash}";
+
+        if (CacheVersionManager::hasL1($l1Key)) {
+            return (bool) CacheVersionManager::getL1($l1Key);
+        }
 
         if ($userRes->is()->superAdmin() && $this->config->superAdminBypass) {
+            CacheVersionManager::setL1($l1Key, true);
             return true;
         }
 
         if ($userRes->is()->denied()->permission($permission)) {
+            CacheVersionManager::setL1($l1Key, false);
             return false;
         }
 
@@ -63,26 +73,32 @@ class AuthorizationService
             return true;
         };
 
-        // Note: `compiled` method in UserGet needs to evaluate all granted permissions 
-        // across roles and direct assignments, matching against contexts.
         $compiled = $userRes->get()->compiled($context);
 
         if (empty($context)) {
-            if (isset($compiled[$fullName]) && empty($compiled[$fullName]))
+            if (isset($compiled[$fullName]) && empty($compiled[$fullName])) {
+                CacheVersionManager::setL1($l1Key, true);
                 return true;
+            }
             foreach ($compiled as $comp => $constraints) {
                 if (empty($constraints) && str_ends_with($comp, '*')) {
-                    if (str_starts_with($fullName, rtrim($comp, '*')))
+                    if (str_starts_with($fullName, rtrim($comp, '*'))) {
+                        CacheVersionManager::setL1($l1Key, true);
                         return true;
+                    }
                 }
             }
         } else {
-            if (isset($compiled[$fullName]) && $checkConstraints($compiled[$fullName]))
+            if (isset($compiled[$fullName]) && $checkConstraints($compiled[$fullName])) {
+                CacheVersionManager::setL1($l1Key, true);
                 return true;
+            }
             foreach ($compiled as $comp => $constraints) {
                 if (str_ends_with($comp, '*')) {
-                    if (str_starts_with($fullName, rtrim($comp, '*')) && $checkConstraints($constraints))
+                    if (str_starts_with($fullName, rtrim($comp, '*')) && $checkConstraints($constraints)) {
+                        CacheVersionManager::setL1($l1Key, true);
                         return true;
+                    }
                 }
             }
         }
@@ -116,6 +132,7 @@ class AuthorizationService
                     $match = true;
                 }
                 if ($match && ($namespace === null || $perm->namespace === $namespace)) {
+                    CacheVersionManager::setL1($l1Key, true);
                     return true;
                 }
             }
@@ -129,11 +146,26 @@ class AuthorizationService
                 $match = true;
             }
             if ($match && ($namespace === null || $perm->namespace === $namespace)) {
+                CacheVersionManager::setL1($l1Key, true);
                 return true;
             }
         }
 
+        CacheVersionManager::setL1($l1Key, false);
         return false;
+    }
+
+    /**
+     * Return a flat dictionary of permission names to boolean values for the user.
+     *
+     * @param object $user
+     * @param string[] $filter
+     * @param array $context
+     * @return array<string, bool>
+     */
+    public function matrix(object $user, array $filter = [], array $context = []): array
+    {
+        return $this->userService->user($user)->matrix($filter, $context);
     }
 
     public function can(object $user, string $permission, ...$arguments): bool
