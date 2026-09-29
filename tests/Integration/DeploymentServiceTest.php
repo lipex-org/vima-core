@@ -19,13 +19,22 @@ class DeploymentServiceTest extends TestCase
         $parent = Vima::roles()->save(new Role('parent'));
         Vima::role('child')->parents()->add($parent->id);
 
-        // 2. We skip dummy policies to avoid testing Reflection mapping logic since
-        // the PolicyRegistry cache is disabled without configuration.
-
         $optimizer = $this->container->get(DeploymentService::class);
         $stats = $optimizer->optimize();
 
         // Expect 2 roles processed for cache warming
         $this->assertEquals(2, $stats['roles']);
+    }
+
+    public function testDeploymentOptimizerWarmsUserMatrices()
+    {
+        Vima::roles()->save(new Role('admin'));
+        $user = (object)['id' => 42];
+        Vima::user($user)->grant()->role('admin');
+
+        $optimizer = $this->container->get(DeploymentService::class);
+        $stats = $optimizer->optimize(users: [42, (object)['id' => 99]]);
+
+        $this->assertEquals(2, $stats['users']);
     }
 }

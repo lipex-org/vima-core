@@ -15,6 +15,8 @@ namespace Vima\Core\Support\Deployment\Services;
 use Vima\Core\Cache\Contracts\CacheInterface;
 use Vima\Core\Cache\Services\CacheVersionManager;
 use Vima\Core\Role\Services\RoleService;
+use Vima\Core\Permission\Services\PermissionService;
+use Vima\Core\User\Services\UserService;
 use Vima\Core\Policy\Services\PolicyRegistry;
 use function Vima\Core\resolve;
 
@@ -26,40 +28,69 @@ use function Vima\Core\resolve;
 class DeploymentService
 {
     private ?CacheVersionManager $versionManager = null;
+    private ?UserService $userService = null;
+    private ?PermissionService $permissionService = null;
 
     public function __construct(
         private RoleService $roleService,
         private PolicyRegistry $policyRegistry,
         private CacheInterface $cache,
-        ?CacheVersionManager $versionManager = null
+        ?CacheVersionManager $versionManager = null,
+        ?UserService $userService = null,
+        ?PermissionService $permissionService = null
     ) {
         $this->versionManager = $versionManager ?? (function_exists('Vima\Core\resolve') ? resolve(CacheVersionManager::class) : null);
+        $this->userService = $userService ?? (function_exists('Vima\Core\resolve') ? resolve(UserService::class) : null);
+        $this->permissionService = $permissionService ?? (function_exists('Vima\Core\resolve') ? resolve(PermissionService::class) : null);
     }
 
     /**
      * Pre-warm all caches to eliminate runtime reflection and recursion.
      *
+     * @param array<int|string|object> $users Optional list of active users to pre-compile matrices for.
+     * @param array<string> $matrixFilter Optional list of permission names to pre-warm in matrix.
      * @return array Summary of optimized items.
      */
-    public function optimize(): array
+    public function optimize(array $users = [], array $matrixFilter = []): array
     {
         $this->clear();
 
         $stats = [
             'roles' => 0,
-            'policies' => 0
+            'policies' => 0,
+            'permissions' => 0,
+            'users' => 0,
         ];
 
-        // 1. Warm Role Inheritance Caches
+        // 1. Warm All System Permissions Index
+        if ($this->permissionService !== null) {
+            $allPerms = $this->permissionService->all();
+            $stats['permissions'] = count($allPerms);
+        }
+
+        // 2. Warm Role Inheritance & Permission Trees
         $roles = $this->roleService->all();
         foreach ($roles as $role) {
             $this->roleService->role($role)->permissions()->all();
             $stats['roles']++;
         }
 
-        // 2. Warm Policy Attribute Maps
+        // 3. Warm Policy Attribute Maps
         $policyStats = $this->policyRegistry->warmCache(force: true);
         $stats['policies'] = count($policyStats);
+
+        // 4. Warm Specific User Matrices (if provided)
+        if ($this->userService !== null && !empty($users)) {
+            foreach ($users as $user) {
+                $userObj = is_object($user) ? $user : (object)['id' => $user];
+                $userResource = $this->userService->user($userObj);
+                // Pre-compile role trees & permission map
+                $userResource->get()->compiled();
+                // Pre-compile boolean matrix for Inertia / frontend
+                $userResource->matrix($matrixFilter);
+                $stats['users']++;
+            }
+        }
 
         return $stats;
     }

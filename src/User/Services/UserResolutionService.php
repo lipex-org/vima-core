@@ -35,6 +35,10 @@ final class UserResolutionService
             $resolvedId = $user->vimaGetId();
         }
 
+        if ($resolvedId === null && is_object($user) && isset($user->id)) {
+            $resolvedId = $user->id;
+        }
+
         if ($resolvedId === null && is_object($user) && !empty($this->config?->userMethods?->id)) {
             $mappedMethod = $this->config->userMethods->id;
             if (method_exists($user, $mappedMethod)) {
